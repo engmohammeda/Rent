@@ -1,0 +1,6 @@
+{
+  "name": "إدارة السكن",
+  "description": "تطبيق احترافي لإدارة إيجار الشقة وفواتير الكهرباء الشهرية، تقسيم المستحقات على السكان، ترحيل المتبقي تلقائياً، تحليل الاستهلاك، وإرسال تذكيرات واتساب وإشعارات للمالك.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
