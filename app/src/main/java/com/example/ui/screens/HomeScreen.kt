@@ -77,6 +77,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -146,8 +147,9 @@ fun HomeScreen(
                             modifier = Modifier.size(46.dp)
                         ) {
                             Image(
-                                painter = painterResource(id = R.mipmap.ic_launcher),
-                                contentDescription = "شعار عزبة"
+                                painter = painterResource(id = R.drawable.ic_ezbah_logo_1794570169183),
+                                contentDescription = "شعار عزبة",
+                                contentScale = ContentScale.Crop
                             )
                         }
                         Spacer(Modifier.width(12.dp))
