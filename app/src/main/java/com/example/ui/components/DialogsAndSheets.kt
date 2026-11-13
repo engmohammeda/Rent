@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,10 +64,12 @@ import com.example.data.local.BillingPeriodEntity
 import com.example.data.local.PaymentAllocationMode
 import com.example.data.local.ResidentEntity
 import com.example.data.local.ResidentLedgerWithDetails
+import com.example.ui.theme.StatusAdvance
+import com.example.ui.theme.StatusAdvanceContainer
 import com.example.ui.theme.StatusPaid
 import com.example.utils.Formatters
+import com.example.utils.ReminderTone
 import com.example.utils.WhatsAppHelper
-import java.util.Calendar
 import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -73,12 +78,14 @@ fun PaymentBottomSheet(
     item: ResidentLedgerWithDetails,
     config: ApartmentConfigEntity,
     monthlyRentPerPerson: Double,
+    cycleRentPerPerson: Double,
     onDismiss: () -> Unit,
     onConfirmPayment: (
         amountBrought: Double,
         mode: PaymentAllocationMode,
         customRent: Double,
         customElec: Double,
+        customWater: Double,
         note: String
     ) -> Unit,
     onResetPayment: () -> Unit
@@ -89,14 +96,24 @@ fun PaymentBottomSheet(
 
     var amountText by remember(item.ledger.id) {
         mutableStateOf(
-            if (ledger.totalRemaining > 0.0) Formatters.round2(ledger.totalRemaining).toString() else ""
+            if (ledger.totalRemaining > 0.05) Formatters.round2(ledger.totalRemaining).toString() else ""
         )
     }
-    var selectedMode by remember { mutableStateOf(PaymentAllocationMode.AUTO_ELECTRICITY_FIRST) }
+    var selectedMode by remember { mutableStateOf(PaymentAllocationMode.AUTO_UTILITIES_FIRST) }
     var customRentText by remember { mutableStateOf(Formatters.round2(ledger.remainingRent).toString()) }
     var customElecText by remember { mutableStateOf(Formatters.round2(ledger.remainingElectricity).toString()) }
+    var customWaterText by remember { mutableStateOf(Formatters.round2(ledger.remainingWater).toString()) }
     var noteText by remember { mutableStateOf("") }
     var showResetConfirm by remember { mutableStateOf(false) }
+
+    val typedAmount = if (selectedMode == PaymentAllocationMode.CUSTOM_SPLIT) {
+        (customRentText.toDoubleOrNull() ?: 0.0) +
+            (customElecText.toDoubleOrNull() ?: 0.0) +
+            (customWaterText.toDoubleOrNull() ?: 0.0)
+    } else {
+        amountText.toDoubleOrNull() ?: 0.0
+    }
+    val projectedAdvance = max(0.0, typedAmount - ledger.totalRemaining)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -121,7 +138,7 @@ fun PaymentBottomSheet(
                         style = MaterialTheme.typography.titleLarge
                     )
                     Text(
-                        text = "غرفة ${item.resident.roomNumber} • سجل حسب ما أحضره الساكن",
+                        text = "غرفة ${item.resident.roomNumber} • يدعم الدفع الجزئي أو لعدة أشهر مقدماً",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -131,8 +148,9 @@ fun PaymentBottomSheet(
                 }
             }
 
-            // Breakdown card
+            // Account Summary Card
             Card(
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 )
@@ -140,43 +158,58 @@ fun PaymentBottomSheet(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
+                        .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("متبقي السكن (شامل السابق):", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            Formatters.formatMoney(ledger.remainingRent, currency),
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("متبقي السكن:", style = MaterialTheme.typography.bodyMedium)
+                        Text(Formatters.formatMoney(ledger.remainingRent, currency), fontWeight = FontWeight.Bold)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("متبقي الكهرباء (شامل السابق):", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            Formatters.formatMoney(ledger.remainingElectricity, currency),
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("متبقي الكهرباء:", style = MaterialTheme.typography.bodyMedium)
+                        Text(Formatters.formatMoney(ledger.remainingElectricity, currency), fontWeight = FontWeight.Bold)
                     }
-                    if (ledger.previousTotalBalance > 0.05) {
+                    if (!config.waterIncludedInRent) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("متبقي الماء:", style = MaterialTheme.typography.bodyMedium)
+                            Text(Formatters.formatMoney(ledger.remainingWater, currency), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (ledger.previousArrearsDebt > 0.05) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
-                                "منها متبقي مرحّل من الشهر السابق:",
+                                "تشمل متأخر من السابق:",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.secondary
                             )
                             Text(
-                                Formatters.formatMoney(ledger.previousTotalBalance, currency),
+                                Formatters.formatMoney(ledger.previousArrearsDebt, currency),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.secondary
                             )
                         }
                     }
+                    if (ledger.totalAdvanceCredit > 0.05) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(
+                                "رصيد دائن مدفوع مقدماً:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StatusAdvance
+                            )
+                            Text(
+                                Formatters.formatMoney(ledger.totalAdvanceCredit, currency),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = StatusAdvance
+                            )
+                        }
+                    }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("الإجمالي المتبقي:", style = MaterialTheme.typography.titleSmall)
+                        Text("المطلوب حالياً:", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            Formatters.formatMoney(ledger.totalRemaining, currency),
+                            if (ledger.totalRemaining <= 0.05) "خالص" else Formatters.formatMoney(ledger.totalRemaining, currency),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -184,8 +217,8 @@ fun PaymentBottomSheet(
                 }
             }
 
-            // Quick amount chips
-            Text("اختيار سريع للمبلغ:", style = MaterialTheme.typography.labelLarge)
+            // Quick presets for flexible real-world Ezbah payments
+            Text("اختيار سريع حسب الدفعة:", style = MaterialTheme.typography.labelLarge)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -197,28 +230,41 @@ fun PaymentBottomSheet(
                             amountText = Formatters.round2(ledger.totalRemaining).toString()
                             selectedMode = PaymentAllocationMode.FULL_REMAINING
                         },
-                        label = { Text("كامل المبلغ (${Formatters.formatMoney(ledger.totalRemaining)})") }
+                        label = { Text("المستحق الحالي (${Formatters.formatMoney(ledger.totalRemaining)})") }
                     )
                 }
-                if (config.rentCycleMonths > 1 && monthlyRentPerPerson > 0.05) {
+                if (config.rentCycleMonths >= 2 && monthlyRentPerPerson > 0.05) {
+                    val twoMonthsPlusElec = Formatters.round2((monthlyRentPerPerson * 2) + ledger.remainingElectricity + ledger.remainingWater)
                     FilterChip(
-                        selected = false,
+                        selected = amountText.toDoubleOrNull() == twoMonthsPlusElec,
                         onClick = {
-                            val totalMonthlyWithElec = Formatters.round2(monthlyRentPerPerson + ledger.remainingElectricity)
-                            amountText = totalMonthlyWithElec.toString()
-                            selectedMode = PaymentAllocationMode.AUTO_ELECTRICITY_FIRST
+                            amountText = twoMonthsPlusElec.toString()
+                            selectedMode = PaymentAllocationMode.AUTO_UTILITIES_FIRST
+                            if (noteText.isBlank()) noteText = "دفعة شهرين"
                         },
-                        label = { Text("قسط شهر + كهرباء (${Formatters.formatMoney(monthlyRentPerPerson + ledger.remainingElectricity)})") }
-                    )
-                    FilterChip(
-                        selected = false,
-                        onClick = {
-                            amountText = Formatters.round2(monthlyRentPerPerson).toString()
-                            selectedMode = PaymentAllocationMode.RENT_ONLY
-                        },
-                        label = { Text("قسط سكن شهر واحد (${Formatters.formatMoney(monthlyRentPerPerson)})") }
+                        label = { Text("شهرين (${Formatters.formatMoney(twoMonthsPlusElec)})") }
                     )
                 }
+                if (config.rentCycleMonths >= 3 && cycleRentPerPerson > 0.05) {
+                    val fullCyclePlusElec = Formatters.round2(cycleRentPerPerson + ledger.remainingElectricity + ledger.remainingWater)
+                    FilterChip(
+                        selected = amountText.toDoubleOrNull() == fullCyclePlusElec,
+                        onClick = {
+                            amountText = fullCyclePlusElec.toString()
+                            selectedMode = PaymentAllocationMode.AUTO_UTILITIES_FIRST
+                            if (noteText.isBlank()) noteText = "دفعة ${config.rentCycleMonths} أشهر كاملة"
+                        },
+                        label = { Text("${config.rentCycleMonths} أشهر كاملة (${Formatters.formatMoney(fullCyclePlusElec)})") }
+                    )
+                }
+                FilterChip(
+                    selected = amountText == "200",
+                    onClick = {
+                        amountText = "200"
+                        selectedMode = PaymentAllocationMode.AUTO_UTILITIES_FIRST
+                    },
+                    label = { Text("200 $currency") }
+                )
                 if (ledger.remainingElectricity > 0.05) {
                     FilterChip(
                         selected = false,
@@ -229,23 +275,13 @@ fun PaymentBottomSheet(
                         label = { Text("الكهرباء فقط (${Formatters.formatMoney(ledger.remainingElectricity)})") }
                     )
                 }
-                if (ledger.remainingRent > 0.05) {
-                    FilterChip(
-                        selected = false,
-                        onClick = {
-                            amountText = Formatters.round2(ledger.remainingRent).toString()
-                            selectedMode = PaymentAllocationMode.RENT_ONLY
-                        },
-                        label = { Text("السكن فقط (${Formatters.formatMoney(ledger.remainingRent)})") }
-                    )
-                }
             }
 
             if (selectedMode != PaymentAllocationMode.CUSTOM_SPLIT) {
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it },
-                    label = { Text("المبلغ الذي أحضره الساكن ($currency)") },
+                    label = { Text("المبلغ المدفوع ($currency)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier
@@ -260,7 +296,7 @@ fun PaymentBottomSheet(
                     OutlinedTextField(
                         value = customRentText,
                         onValueChange = { customRentText = it },
-                        label = { Text("حصة السكن ($currency)") },
+                        label = { Text("السكن") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -268,24 +304,49 @@ fun PaymentBottomSheet(
                     OutlinedTextField(
                         value = customElecText,
                         onValueChange = { customElecText = it },
-                        label = { Text("حصة الكهرباء ($currency)") },
+                        label = { Text("الكهرباء") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
+                    if (!config.waterIncludedInRent) {
+                        OutlinedTextField(
+                            value = customWaterText,
+                            onValueChange = { customWaterText = it },
+                            label = { Text("الماء") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
-            Text("طريقة توزيع الدفعة:", style = MaterialTheme.typography.labelLarge)
+            if (projectedAdvance > 0.05) {
+                Surface(
+                    color = StatusAdvanceContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "سيُحتفظ بمبلغ ${Formatters.formatMoney(projectedAdvance, currency)} كرصيد مدفوع مقدماً ويُخصم تلقائياً من الأشهر القادمة.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = StatusAdvance,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            }
+
+            Text("توزيع المبلغ:", style = MaterialTheme.typography.labelLarge)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 listOf(
-                    PaymentAllocationMode.AUTO_ELECTRICITY_FIRST to "الكهرباء أولاً ثم السكن",
+                    PaymentAllocationMode.AUTO_UTILITIES_FIRST to "الكهرباء/الماء أولاً ثم السكن",
                     PaymentAllocationMode.AUTO_RENT_FIRST to "السكن أولاً ثم الكهرباء",
+                    PaymentAllocationMode.RENT_ONLY to "للسكن (أو مقدم سكن)",
                     PaymentAllocationMode.ELECTRICITY_ONLY to "للكهرباء فقط",
-                    PaymentAllocationMode.RENT_ONLY to "للسكن فقط",
                     PaymentAllocationMode.CUSTOM_SPLIT to "تقسيم مخصص"
                 ).forEach { (mode, label) ->
                     FilterChip(
@@ -299,7 +360,7 @@ fun PaymentBottomSheet(
             OutlinedTextField(
                 value = noteText,
                 onValueChange = { noteText = it },
-                label = { Text("ملاحظة (اختياري)") },
+                label = { Text("ملاحظة (مثال: دفع مقدم شهرين / تحويل بنكي)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -316,7 +377,7 @@ fun PaymentBottomSheet(
                         ),
                         modifier = Modifier.height(48.dp)
                     ) {
-                        Text("تصفير المدفوع")
+                        Text("تصفير")
                     }
                 }
                 Button(
@@ -324,13 +385,10 @@ fun PaymentBottomSheet(
                         val amt = amountText.toDoubleOrNull() ?: 0.0
                         val cRent = customRentText.toDoubleOrNull() ?: 0.0
                         val cElec = customElecText.toDoubleOrNull() ?: 0.0
-                        onConfirmPayment(amt, selectedMode, cRent, cElec, noteText)
+                        val cWater = customWaterText.toDoubleOrNull() ?: 0.0
+                        onConfirmPayment(amt, selectedMode, cRent, cElec, cWater, noteText)
                     },
-                    enabled = if (selectedMode == PaymentAllocationMode.CUSTOM_SPLIT) {
-                        (customRentText.toDoubleOrNull() ?: 0.0) + (customElecText.toDoubleOrNull() ?: 0.0) > 0.0
-                    } else {
-                        (amountText.toDoubleOrNull() ?: 0.0) > 0.0
-                    },
+                    enabled = typedAmount > 0.0,
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -348,7 +406,7 @@ fun PaymentBottomSheet(
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
             title = { Text("تصفير مدفوعات الفترة") },
-            text = { Text("هل تريد إعادة تعيين المبلغ المدفوع لـ ${item.resident.name} إلى صفر؟") },
+            text = { Text("هل تريد إعادة تعيين المبلغ المدفوع لـ ${item.resident.name} في هذا الشهر إلى صفر؟") },
             confirmButton = {
                 TextButton(onClick = {
                     showResetConfirm = false
@@ -363,22 +421,27 @@ fun PaymentBottomSheet(
 }
 
 @Composable
-fun ElectricityBillDialog(
+fun UtilitiesBillDialog(
     initialYear: Int,
     initialMonth: Int,
-    initialAmount: Double,
+    initialElecAmount: Double,
+    initialWaterAmount: Double,
     initialPrevReading: Double,
     initialCurrReading: Double,
+    waterIncludedInRent: Boolean,
     activeResidentsCount: Int,
     currency: String,
     allowMonthSelection: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (year: Int, month: Int, amount: Double, prevReading: Double, currReading: Double) -> Unit
+    onSave: (year: Int, month: Int, elecAmount: Double, waterAmount: Double, prevReading: Double, currReading: Double) -> Unit
 ) {
     var year by remember { mutableIntStateOf(initialYear) }
     var month by remember { mutableIntStateOf(initialMonth) }
-    var amountText by remember {
-        mutableStateOf(if (initialAmount > 0.0) Formatters.round2(initialAmount).toString() else "")
+    var elecText by remember {
+        mutableStateOf(if (initialElecAmount > 0.0) Formatters.round2(initialElecAmount).toString() else "")
+    }
+    var waterText by remember {
+        mutableStateOf(if (initialWaterAmount > 0.0) Formatters.round2(initialWaterAmount).toString() else "")
     }
     var prevText by remember {
         mutableStateOf(if (initialPrevReading > 0.0) Formatters.round2(initialPrevReading).toString() else "")
@@ -390,8 +453,10 @@ fun ElectricityBillDialog(
     val prevVal = prevText.toDoubleOrNull() ?: 0.0
     val currVal = currText.toDoubleOrNull() ?: 0.0
     val consumption = max(0.0, currVal - prevVal)
-    val billVal = amountText.toDoubleOrNull() ?: 0.0
-    val perPerson = billVal / max(1, activeResidentsCount)
+    val elecVal = elecText.toDoubleOrNull() ?: 0.0
+    val waterVal = if (waterIncludedInRent) 0.0 else (waterText.toDoubleOrNull() ?: 0.0)
+    val elecPerPerson = elecVal / max(1, activeResidentsCount)
+    val waterPerPerson = waterVal / max(1, activeResidentsCount)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -403,11 +468,14 @@ fun ElectricityBillDialog(
                     tint = MaterialTheme.colorScheme.secondary
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("فاتورة الكهرباء • ${Formatters.formatMonthLabel(year, month)}")
+                Text("الفواتير • ${Formatters.formatMonthLabel(year, month)}")
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 if (allowMonthSelection) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -418,22 +486,19 @@ fun ElectricityBillDialog(
                             val (py, pm) = Formatters.previousMonth(year, month)
                             year = py
                             month = pm
-                        }) { Text("الشهر السابق") }
-                        Text(
-                            Formatters.formatMonthLabel(year, month),
-                            fontWeight = FontWeight.Bold
-                        )
+                        }) { Text("السابق") }
+                        Text(Formatters.formatMonthLabel(year, month), fontWeight = FontWeight.Bold)
                         OutlinedButton(onClick = {
                             val (ny, nm) = Formatters.nextMonth(year, month)
                             year = ny
                             month = nm
-                        }) { Text("الشهر التالي") }
+                        }) { Text("التالي") }
                     }
                 }
                 OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("إجمالي تكلفة الفاتورة ($currency)") },
+                    value = elecText,
+                    onValueChange = { elecText = it },
+                    label = { Text("فاتورة الكهرباء ($currency)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier
@@ -458,6 +523,25 @@ fun ElectricityBillDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                if (!waterIncludedInRent) {
+                    OutlinedTextField(
+                        value = waterText,
+                        onValueChange = { waterText = it },
+                        label = { Text("فاتورة الماء ($currency)") },
+                        leadingIcon = { Icon(Icons.Default.WaterDrop, contentDescription = null) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text(
+                        "ملاحظة: الماء مضبوط حالياً على (مشمول ضمن الإيجار) — يمكنك تغييره من الإعدادات.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
@@ -469,18 +553,23 @@ fun ElectricityBillDialog(
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
-                            "نصيب الفرد ($activeResidentsCount سكان): ${Formatters.formatMoney(perPerson, currency)}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                            "نصيب الفرد (كهرباء): ${Formatters.formatMoney(elecPerPerson, currency)}",
+                            style = MaterialTheme.typography.titleSmall
                         )
+                        if (!waterIncludedInRent) {
+                            Text(
+                                "نصيب الفرد (ماء): ${Formatters.formatMoney(waterPerPerson, currency)}",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
                     }
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSave(year, month, billVal, prevVal, currVal) },
-                enabled = billVal >= 0.0,
+                onClick = { onSave(year, month, elecVal, waterVal, prevVal, currVal) },
+                enabled = elecVal >= 0.0,
                 modifier = Modifier.testTag("save_electricity_button")
             ) {
                 Text("حفظ وتقسيم")
@@ -497,10 +586,12 @@ fun RolloverPeriodDialog(
     currentPeriod: BillingPeriodEntity,
     unpaidResidentsCount: Int,
     totalCarryOverAmount: Double,
+    totalAdvanceCredits: Double,
     config: ApartmentConfigEntity,
     onDismiss: () -> Unit,
     onConfirmRollover: (
         nextElecAmount: Double,
+        nextWaterAmount: Double,
         nextPrevReading: Double,
         nextCurrReading: Double,
         chargeRent: Boolean
@@ -509,6 +600,7 @@ fun RolloverPeriodDialog(
     val (nextY, nextM) = Formatters.nextMonth(currentPeriod.year, currentPeriod.month)
     val nextLabel = Formatters.formatMonthLabel(nextY, nextM)
     var elecAmountText by remember { mutableStateOf("") }
+    var waterAmountText by remember { mutableStateOf("") }
     var prevReadingText by remember {
         mutableStateOf(if (currentPeriod.currMeterReading > 0) currentPeriod.currMeterReading.toString() else "")
     }
@@ -529,18 +621,22 @@ fun RolloverPeriodDialog(
                     )
                 ) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "ملخص الترحيل التلقائي:",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            if (unpaidResidentsCount > 0) {
-                                "سيتم ترحيل متبقي بمقدار ${Formatters.formatMoney(totalCarryOverAmount, config.currencySymbol)} من $unpaidResidentsCount ساكنين تلقائياً وتوضيحه كـ (متبقي من الشهر السابق) في $nextLabel."
-                            } else {
-                                "جميع السكان سددوا مستحقات ${currentPeriod.label} بالكامل! 🎉"
-                            },
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text("ملخص الترحيل التلقائي:", style = MaterialTheme.typography.titleSmall)
+                        if (unpaidResidentsCount > 0) {
+                            Text(
+                                "• متبقي غير مدفوع: ${Formatters.formatMoney(totalCarryOverAmount, config.currencySymbol)} ($unpaidResidentsCount ساكنين) سيُرحّل كمتبقي سابق.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            Text("• لا توجد متأخرات غير مدفوعة!", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (totalAdvanceCredits > 0.05) {
+                            Text(
+                                "• أرصدة مدفوعة مقدماً: ${Formatters.formatMoney(totalAdvanceCredits, config.currencySymbol)} ستُخصم تلقائياً من مستحقات الشهر الجديد.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StatusAdvance
+                            )
+                        }
                     }
                 }
 
@@ -550,7 +646,7 @@ fun RolloverPeriodDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "احتساب حصة الإيجار في الشهر الجديد",
+                        "احتساب حصة الإيجار في $nextLabel",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
@@ -565,6 +661,16 @@ fun RolloverPeriodDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (!config.waterIncludedInRent) {
+                    OutlinedTextField(
+                        value = waterAmountText,
+                        onValueChange = { waterAmountText = it },
+                        label = { Text("فاتورة ماء $nextLabel (اختياري)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = prevReadingText,
@@ -589,13 +695,14 @@ fun RolloverPeriodDialog(
             Button(
                 onClick = {
                     val amt = elecAmountText.toDoubleOrNull() ?: 0.0
+                    val water = waterAmountText.toDoubleOrNull() ?: 0.0
                     val prev = prevReadingText.toDoubleOrNull() ?: currentPeriod.currMeterReading
                     val curr = currReadingText.toDoubleOrNull() ?: prev
-                    onConfirmRollover(amt, prev, curr, chargeRent)
+                    onConfirmRollover(amt, water, prev, curr, chargeRent)
                 },
                 modifier = Modifier.testTag("confirm_rollover_button")
             ) {
-                Text("إغلاق وترحيل الآن")
+                Text("إغلاق وترحيل")
             }
         },
         dismissButton = {
@@ -614,12 +721,23 @@ fun WhatsAppQueueDialog(
     val context = LocalContext.current
     val unpaidItems = remember(items) { items.filter { it.ledger.totalRemaining > 0.05 } }
     val sentIds = remember { mutableStateListOf<Long>() }
+    var tone by remember { mutableStateOf(ReminderTone.NATURAL) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تذكيرات واتساب (${unpaidItems.size} ساكنين)") },
+        title = { Text("رسائل وتذكيرات واتساب (${unpaidItems.size})") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ReminderTone.entries.forEach { t ->
+                        FilterChip(
+                            selected = tone == t,
+                            onClick = { tone = t },
+                            label = { Text(t.label) }
+                        )
+                    }
+                }
+
                 OutlinedButton(
                     onClick = {
                         val summary = WhatsAppHelper.buildApartmentSummaryMessage(items, period, config)
@@ -629,18 +747,18 @@ fun WhatsAppQueueDialog(
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("مشاركة ملخص الشقة كاملاً للمجموعة")
+                    Text("مشاركة ملخص العزبة للمجموعة")
                 }
 
                 if (unpaidItems.isEmpty()) {
                     Text(
-                        "جميع السكان مسددون بالكامل لهذه الفترة!",
+                        "الجميع مسدد بالكامل لهذه الفترة!",
                         style = MaterialTheme.typography.bodyMedium,
                         color = StatusPaid
                     )
                 } else {
                     LazyColumn(
-                        modifier = Modifier.height(260.dp),
+                        modifier = Modifier.height(250.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(unpaidItems, key = { it.resident.id }) { item ->
@@ -658,10 +776,7 @@ fun WhatsAppQueueDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            item.resident.name,
-                                            style = MaterialTheme.typography.titleSmall
-                                        )
+                                        Text(item.resident.name, style = MaterialTheme.typography.titleSmall)
                                         Text(
                                             "المتبقي: ${Formatters.formatMoney(item.ledger.totalRemaining, config.currencySymbol)}",
                                             style = MaterialTheme.typography.bodySmall,
@@ -671,7 +786,12 @@ fun WhatsAppQueueDialog(
                                     Button(
                                         onClick = {
                                             if (!isSent) sentIds.add(item.resident.id)
-                                            val msg = WhatsAppHelper.buildResidentReminderMessage(item, period, config)
+                                            val msg = WhatsAppHelper.buildResidentReminderMessage(
+                                                item = item,
+                                                period = period,
+                                                config = config,
+                                                tone = tone
+                                            )
                                             WhatsAppHelper.openWhatsAppForResident(
                                                 context,
                                                 item.resident.phoneNumber,
@@ -685,7 +805,7 @@ fun WhatsAppQueueDialog(
                                         if (isSent) {
                                             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
                                             Spacer(Modifier.width(4.dp))
-                                            Text("تم الفتح")
+                                            Text("تم")
                                         } else {
                                             Text("إرسال")
                                         }
@@ -734,7 +854,7 @@ fun ResidentEditDialog(
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("رقم الواتساب (مع مفتاح الدولة مثل 9665...)") },
+                    label = { Text("رقم الواتساب (مع مفتاح الدولة)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

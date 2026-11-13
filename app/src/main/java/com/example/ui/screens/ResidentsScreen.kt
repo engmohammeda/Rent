@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -61,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.local.ResidentEntity
 import com.example.ui.MainUiState
 import com.example.ui.components.ResidentEditDialog
+import com.example.ui.theme.EzbahGold
 import com.example.ui.theme.StatusPaid
 import com.example.ui.theme.StatusPaidContainer
 import com.example.utils.Formatters
@@ -80,12 +83,17 @@ fun ResidentsScreen(
     var autoTotal by remember(state.residents.size) {
         mutableIntStateOf(max(1, state.residents.size))
     }
+    var roomFilter by remember { mutableStateOf<Int?>(null) }
     var showGenerateConfirm by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingResident by remember { mutableStateOf<ResidentEntity?>(null) }
 
     val previewPerPersonCycle = state.config.rentCycleAmount / max(1, autoTotal)
     val previewPerPersonMonth = (state.config.rentCycleAmount / max(1, state.config.rentCycleMonths)) / max(1, autoTotal)
+    val displayedResidents = remember(state.residents, roomFilter) {
+        if (roomFilter == null) state.residents
+        else state.residents.filter { it.roomNumber == roomFilter }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -93,6 +101,7 @@ fun ResidentsScreen(
             FloatingActionButton(
                 onClick = { showAddDialog = true },
                 containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.testTag("add_resident_fab")
             ) {
                 Icon(Icons.Default.Add, contentDescription = "إضافة ساكن جديد")
@@ -109,17 +118,17 @@ fun ResidentsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .widthIn(max = 720.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
                     Column {
                         Text(
-                            "إدارة السكان والتوليد التلقائي",
+                            "أعضاء ${state.config.apartmentName}",
                             style = MaterialTheme.typography.headlineSmall
                         )
                         Text(
-                            "أدخل عدد السكان لإنشاء الشخصيات تلقائياً أو عدّل كل ساكن حسب رغبتك",
+                            "خصص عدد الغرف والسكان تلقائياً أو عدّل اسم ورقم واتساب كل ساكن",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -129,34 +138,42 @@ fun ResidentsScreen(
                 // Auto-Generate Residents Card
                 item {
                     Card(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(22.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
                         ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                Surface(
+                                    color = EzbahGold.copy(alpha = 0.16f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = EzbahGold,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "إنشاء السكان تلقائياً حسب العدد",
+                                    "توليد وتوزيع السكان تلقائياً",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                             }
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                // Total residents stepper
                                 StepperBox(
                                     label = "عدد السكان",
                                     value = autoTotal,
@@ -164,12 +181,11 @@ fun ResidentsScreen(
                                     onIncrement = { if (autoTotal < 60) autoTotal++ },
                                     modifier = Modifier.weight(1f)
                                 )
-                                // Rooms stepper
                                 StepperBox(
                                     label = "عدد الغرف",
                                     value = autoRooms,
                                     onDecrement = { if (autoRooms > 1) autoRooms-- },
-                                    onIncrement = { if (autoRooms < 12) autoRooms++ },
+                                    onIncrement = { if (autoRooms < 20) autoRooms++ },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -178,7 +194,7 @@ fun ResidentsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                listOf(6, 8, 10, 12, 14, 16).forEach { preset ->
+                                listOf(4, 6, 8, 10, 12, 16).forEach { preset ->
                                     FilterChip(
                                         selected = autoTotal == preset,
                                         onClick = { autoTotal = preset },
@@ -189,7 +205,7 @@ fun ResidentsScreen(
 
                             Surface(
                                 color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
@@ -201,11 +217,11 @@ fun ResidentsScreen(
                                         style = MaterialTheme.typography.labelLarge
                                     )
                                     Text(
-                                        "• نصيب الساكن من الدورة (${state.config.rentCycleMonths} أشهر): ${Formatters.formatMoney(previewPerPersonCycle, state.config.currencySymbol)}",
+                                        "• نصيب الفرد للدورة (${state.config.rentCycleMonths} أشهر): ${Formatters.formatMoney(previewPerPersonCycle, state.config.currencySymbol)}",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
-                                        "• القسط الشهري للساكن الواحد: ${Formatters.formatMoney(previewPerPersonMonth, state.config.currencySymbol)} / شهر",
+                                        "• القسط الشهري للفرد: ${Formatters.formatMoney(previewPerPersonMonth, state.config.currencySymbol)} / شهر",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold
@@ -228,6 +244,32 @@ fun ResidentsScreen(
                     }
                 }
 
+                // Room filter chips
+                if (state.config.roomCount > 1) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = roomFilter == null,
+                                onClick = { roomFilter = null },
+                                label = { Text("جميع الغرف (${state.residents.size})") }
+                            )
+                            for (r in 1..state.config.roomCount) {
+                                val countInRoom = state.residents.count { it.roomNumber == r }
+                                FilterChip(
+                                    selected = roomFilter == r,
+                                    onClick = { roomFilter = if (roomFilter == r) null else r },
+                                    label = { Text("غرفة $r ($countInRoom)") }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // List header
                 item {
                     Row(
@@ -236,20 +278,23 @@ fun ResidentsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "قائمة السكان (${state.residents.size})",
+                            "قائمة السكان (${displayedResidents.size})",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            "اضغط للتعديل والاسم ورقم الواتساب",
+                            "اضغط على البطاقة للتعديل",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                if (state.residents.isEmpty()) {
+                if (displayedResidents.isEmpty()) {
                     item {
-                        Card(modifier = Modifier.fillMaxWidth()) {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -258,16 +303,16 @@ fun ResidentsScreen(
                             ) {
                                 Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(40.dp))
                                 Spacer(Modifier.height(8.dp))
-                                Text("لا يوجد سكان حالياً")
+                                Text("لا يوجد سكان في هذه القائمة")
                             }
                         }
                     }
                 } else {
-                    items(state.residents, key = { it.id }) { resident ->
+                    items(displayedResidents, key = { it.id }) { resident ->
                         Card(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { editingResident = resident }
@@ -285,7 +330,7 @@ fun ResidentsScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(42.dp)
+                                            .size(44.dp)
                                             .clip(CircleShape)
                                             .background(
                                                 if (resident.isActive) MaterialTheme.colorScheme.primaryContainer
@@ -296,7 +341,8 @@ fun ResidentsScreen(
                                         Text(
                                             resident.name.take(2),
                                             style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                     Spacer(Modifier.width(12.dp))
@@ -450,7 +496,7 @@ private fun StepperBox(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = modifier
     ) {
         Column(
@@ -461,11 +507,11 @@ private fun StepperBox(
             Spacer(Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 IconButton(
                     onClick = onDecrement,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.minimumInteractiveComponentSize()
                 ) {
                     Icon(Icons.Default.Remove, contentDescription = "إنقاص $label")
                 }
@@ -476,7 +522,7 @@ private fun StepperBox(
                 )
                 IconButton(
                     onClick = onIncrement,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.minimumInteractiveComponentSize()
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "زيادة $label")
                 }

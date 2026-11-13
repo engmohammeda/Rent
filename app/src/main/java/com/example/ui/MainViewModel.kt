@@ -15,6 +15,7 @@ import com.example.data.local.ResidentLedgerWithDetails
 import com.example.data.local.SakanDatabase
 import com.example.data.repository.SakanRepository
 import com.example.notifications.ReminderScheduler
+import com.example.utils.Formatters
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,6 +38,12 @@ data class ElectricityAnalytics(
     val maxPeriod: BillingPeriodEntity? = null,
     val minPeriod: BillingPeriodEntity? = null,
     val chartPeriods: List<BillingPeriodEntity> = emptyList()
+)
+
+data class RoomSummary(
+    val roomNumber: Int,
+    val residentCount: Int,
+    val remainingTotal: Double
 )
 
 data class MainUiState(
@@ -68,14 +75,20 @@ data class MainUiState(
     val totalRemaining: Double
         get() = allLedgerItems.sumOf { it.ledger.totalRemaining }
 
+    val totalAdvanceCredits: Double
+        get() = allLedgerItems.sumOf { it.ledger.totalAdvanceCredit }
+
     val totalPreviousArrears: Double
-        get() = allLedgerItems.sumOf { it.ledger.previousTotalBalance }
+        get() = allLedgerItems.sumOf { it.ledger.previousArrearsDebt }
 
-    val totalRentRemaining: Double
-        get() = allLedgerItems.sumOf { it.ledger.remainingRent }
+    val paidOrAdvanceCount: Int
+        get() = allLedgerItems.count {
+            it.ledger.paymentStatus == PaymentStatus.PAID ||
+                it.ledger.paymentStatus == PaymentStatus.ADVANCE_CREDIT
+        }
 
-    val totalElectricityRemaining: Double
-        get() = allLedgerItems.sumOf { it.ledger.remainingElectricity }
+    val advanceCreditCount: Int
+        get() = allLedgerItems.count { it.ledger.paymentStatus == PaymentStatus.ADVANCE_CREDIT }
 
     val paidCount: Int
         get() = allLedgerItems.count { it.ledger.paymentStatus == PaymentStatus.PAID }
@@ -97,6 +110,19 @@ data class MainUiState(
 
     val electricityPerPerson: Double
         get() = (selectedPeriod?.electricityTotalAmount ?: 0.0) / activeResidentsCount
+
+    val waterPerPerson: Double
+        get() = if (config.waterIncludedInRent) 0.0 else (selectedPeriod?.waterTotalAmount ?: 0.0) / activeResidentsCount
+
+    val roomSummaries: List<RoomSummary>
+        get() = (1..max(1, config.roomCount)).map { room ->
+            val itemsInRoom = allLedgerItems.filter { it.resident.roomNumber == room }
+            RoomSummary(
+                roomNumber = room,
+                residentCount = itemsInRoom.size,
+                remainingTotal = itemsInRoom.sumOf { it.ledger.totalRemaining }
+            )
+        }
 }
 
 private data class FilterState(
@@ -297,7 +323,7 @@ class MainViewModel(
                 it.copy(
                     isMultiSelectMode = false,
                     selectedLedgerIds = emptySet(),
-                    snackbarMessage = "تم تسجيل سداد ${ids.size} سكان بالكامل"
+                    snackbarMessage = "تم اعتماد سداد ${ids.size} سكان بالكامل"
                 )
             }
         }
@@ -310,6 +336,7 @@ class MainViewModel(
         mode: PaymentAllocationMode,
         customRentPart: Double = 0.0,
         customElectricityPart: Double = 0.0,
+        customWaterPart: Double = 0.0,
         note: String = ""
     ) {
         viewModelScope.launch {
@@ -320,6 +347,7 @@ class MainViewModel(
                 mode = mode,
                 customRentPart = customRentPart,
                 customElectricityPart = customElectricityPart,
+                customWaterPart = customWaterPart,
                 note = note
             )
             showMessage("تم تسجيل دفعة $residentName بنجاح")
@@ -333,15 +361,16 @@ class MainViewModel(
         }
     }
 
-    fun updateCurrentElectricity(
+    fun updateCurrentUtilities(
         periodId: Long,
         electricityAmount: Double,
+        waterAmount: Double,
         prevReading: Double,
         currReading: Double
     ) {
         viewModelScope.launch {
-            repository.updatePeriodElectricity(periodId, electricityAmount, prevReading, currReading)
-            showMessage("تم تحديث فاتورة الكهرباء وتقسيمها على السكان")
+            repository.updatePeriodUtilities(periodId, electricityAmount, waterAmount, prevReading, currReading)
+            showMessage("تم تحديث الفواتير وتقسيمها على السكان")
         }
     }
 
@@ -349,6 +378,7 @@ class MainViewModel(
         year: Int,
         month: Int,
         electricityAmount: Double,
+        waterAmount: Double,
         prevReading: Double,
         currReading: Double
     ) {
@@ -357,16 +387,18 @@ class MainViewModel(
                 year = year,
                 month = month,
                 electricityAmount = electricityAmount,
+                waterAmount = waterAmount,
                 prevReading = prevReading,
                 currReading = currReading
             )
-            showMessage("تم حفظ بيانات شهر ${com.example.utils.Formatters.formatMonthLabel(year, month)}")
+            showMessage("تم حفظ بيانات شهر ${Formatters.formatMonthLabel(year, month)}")
         }
     }
 
     fun closePeriodAndRollover(
         currentPeriodId: Long,
         nextElectricityAmount: Double,
+        nextWaterAmount: Double,
         nextPrevReading: Double,
         nextCurrReading: Double,
         chargeRentInNewPeriod: Boolean
@@ -375,6 +407,7 @@ class MainViewModel(
             val newPeriodId = repository.closePeriodAndRollover(
                 currentPeriodId = currentPeriodId,
                 nextElectricityAmount = nextElectricityAmount,
+                nextWaterAmount = nextWaterAmount,
                 nextPrevReading = nextPrevReading,
                 nextCurrReading = nextCurrReading,
                 chargeRentInNewPeriod = chargeRentInNewPeriod
@@ -382,7 +415,7 @@ class MainViewModel(
             filterState.update {
                 it.copy(
                     selectedPeriodId = newPeriodId,
-                    snackbarMessage = "تم إغلاق الشهر وترحيل المبالغ المتبقية للشهر الجديد تلقائياً"
+                    snackbarMessage = "تم إغلاق الشهر وترحيل المتبقي والأرصدة المقدمة للشهر الجديد"
                 )
             }
         }
@@ -391,7 +424,7 @@ class MainViewModel(
     fun generateResidentsAuto(roomCount: Int, totalResidents: Int, replaceExisting: Boolean) {
         viewModelScope.launch {
             repository.generateResidentsAuto(roomCount, totalResidents, replaceExisting)
-            showMessage("تم توليد $totalResidents ساكنين وتحديث الأنصبة بنجاح")
+            showMessage("تم توليد $totalResidents ساكنين وتحديث الأنصبة")
         }
     }
 
@@ -431,14 +464,11 @@ class MainViewModel(
     fun triggerTestNotification() {
         val state = uiState.value
         val unpaid = state.unpaidCount + state.partialCount
-        val remaining = com.example.utils.Formatters.formatMoney(
-            state.totalRemaining,
-            state.config.currencySymbol
-        )
+        val remaining = Formatters.formatMoney(state.totalRemaining, state.config.currencySymbol)
         val msg = if (unpaid > 0) {
             "متبقي $remaining لدى $unpaid ساكنين في ${state.selectedPeriod?.label ?: "الشهر الحالي"}. اضغط للمطالبة عبر واتساب."
         } else {
-            "جميع مستحقات ${state.selectedPeriod?.label ?: "الشهر الحالي"} مدفوعة بالكامل! 🎉"
+            "جميع مستحقات ${state.selectedPeriod?.label ?: "الشهر الحالي"} مسددة بالكامل!"
         }
         ReminderScheduler.postNotification(
             appContext,

@@ -37,7 +37,6 @@ class ReminderReceiver : BroadcastReceiver() {
                 val unpaidCount = ledgers.count { it.totalRemaining > 0.05 }
                 val totalRemaining = ledgers.sumOf { it.totalRemaining }
 
-                // Stop reminding once everything is completely paid and electricity bill is recorded
                 val isElectricityPending = openPeriod.electricityTotalAmount <= 0.01
                 if (unpaidCount == 0 && !isElectricityPending) {
                     return@launch
@@ -49,14 +48,14 @@ class ReminderReceiver : BroadcastReceiver() {
 
                 val (title, body) = when {
                     isElectricityPending && isElecDueSoon -> {
-                        "تنبيه موعد فاتورة الكهرباء (${openPeriod.label})" to
-                            "اقترب موعد فاتورة الكهرباء. سجل قراءة العداد والمبلغ لتقسيمه على السكان ومطالبتهم."
+                        "تنبيه فاتورة الكهرباء • ${config.apartmentName}" to
+                            "اقترب موعد فاتورة شهر ${openPeriod.label}. سجّل القراءة والمبلغ لتقسيمه على السكان."
                     }
                     unpaidCount > 0 -> {
                         val remainingStr = Formatters.formatMoney(totalRemaining, config.currencySymbol)
-                        val prefix = if (isRentDueSoon || isElecDueSoon) "حان موعد التحصيل • " else ""
-                        "${prefix}تذكير متابعة السكن والكهرباء" to
-                            "متبقي $remainingStr لدى $unpaidCount ساكنين لشهر ${openPeriod.label}. اضغط للمتابعة وإرسال تذكير واتساب."
+                        val prefix = if (isRentDueSoon || isElecDueSoon) "موعد التحصيل • " else ""
+                        "${prefix}${config.apartmentName} (${openPeriod.label})" to
+                            "متبقي $remainingStr لدى $unpaidCount ساكنين. اضغط للمتابعة وإرسال تذكير واتساب."
                     }
                     else -> return@launch
                 }
@@ -83,10 +82,10 @@ object ReminderScheduler {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "تذكيرات الإيجار والكهرباء",
+                "تذكيرات العزبة والفواتير",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "إشعارات للمالك لمتابعة مواعيد فاتورة الكهرباء والإيجار وتحصيل المتبقي من السكان"
+                description = "تنبيهات دورية للمالك لمتابعة الإيجار وفواتير الكهرباء والماء حتى اكتمال السداد"
             }
             val manager = context.getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)

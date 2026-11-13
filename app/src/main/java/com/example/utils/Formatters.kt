@@ -11,7 +11,7 @@ object Formatters {
     private val enSymbols = DecimalFormatSymbols(Locale.US)
     private val moneyFormat = DecimalFormat("#,##0.##", enSymbols)
     private val kwhFormat = DecimalFormat("#,##0.#", enSymbols)
-    private val dateFormat = SimpleDateFormat("dd/MM/yyyy • hh:mm a", Locale("ar"))
+    private val dateFormat = SimpleDateFormat("dd/MM/yyyy • hh:mm a", Locale.forLanguageTag("ar"))
 
     private val arabicMonths = listOf(
         "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",

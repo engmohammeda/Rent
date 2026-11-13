@@ -25,9 +25,6 @@ class SakanRepository(private val database: SakanDatabase) {
     fun observeLedgerForPeriod(periodId: Long): Flow<List<ResidentLedgerEntity>> =
         dao.observeLedgerForPeriod(periodId)
 
-    fun observeTransactionsForPeriod(periodId: Long): Flow<List<PaymentTransactionEntity>> =
-        dao.observeTransactionsForPeriod(periodId)
-
     suspend fun ensureInitialized() {
         database.withTransaction {
             var config = dao.getConfigOnce()
@@ -60,6 +57,7 @@ class SakanRepository(private val database: SakanDatabase) {
                     rentCycleTotalAmount = config.rentCycleAmount,
                     rentCycleMonths = config.rentCycleMonths,
                     electricityTotalAmount = 0.0,
+                    waterTotalAmount = 0.0,
                     prevMeterReading = 0.0,
                     currMeterReading = 0.0,
                     isClosed = false
@@ -72,8 +70,7 @@ class SakanRepository(private val database: SakanDatabase) {
                     ResidentLedgerEntity(
                         periodId = periodId,
                         residentId = r.id,
-                        currentRentShare = rentShare,
-                        currentElectricityShare = 0.0
+                        currentRentShare = rentShare
                     )
                 }
                 dao.insertLedgerEntries(entries)
@@ -96,6 +93,7 @@ class SakanRepository(private val database: SakanDatabase) {
                 targetYear = nowYear,
                 targetMonth = nowMonth,
                 electricityAmount = 0.0,
+                waterAmount = 0.0,
                 prevReading = openPeriod.currMeterReading,
                 currReading = openPeriod.currMeterReading,
                 config = config
@@ -161,12 +159,14 @@ class SakanRepository(private val database: SakanDatabase) {
                     val count = max(1, savedResidents.size)
                     val rentShare = Formatters.round2(openPeriod.rentPoolAmount / count)
                     val elecShare = Formatters.round2(openPeriod.electricityTotalAmount / count)
+                    val waterShare = if (updatedConfig.waterIncludedInRent) 0.0 else Formatters.round2(openPeriod.waterTotalAmount / count)
                     val entries = savedResidents.map { r ->
                         ResidentLedgerEntity(
                             periodId = openPeriod.id,
                             residentId = r.id,
                             currentRentShare = rentShare,
-                            currentElectricityShare = elecShare
+                            currentElectricityShare = elecShare,
+                            currentWaterShare = waterShare
                         )
                     }
                     dao.insertLedgerEntries(entries)
@@ -229,7 +229,8 @@ class SakanRepository(private val database: SakanDatabase) {
                         openPeriod.copy(
                             rentPoolAmount = newRentPool,
                             rentCycleTotalAmount = newConfig.rentCycleAmount,
-                            rentCycleMonths = newConfig.rentCycleMonths
+                            rentCycleMonths = newConfig.rentCycleMonths,
+                            waterTotalAmount = if (newConfig.waterIncludedInRent) 0.0 else openPeriod.waterTotalAmount
                         )
                     )
                     recalculateOpenPeriodSharesInternal(openPeriod.id)
@@ -238,17 +239,20 @@ class SakanRepository(private val database: SakanDatabase) {
         }
     }
 
-    suspend fun updatePeriodElectricity(
+    suspend fun updatePeriodUtilities(
         periodId: Long,
         electricityAmount: Double,
+        waterAmount: Double,
         prevReading: Double,
         currReading: Double
     ) {
         database.withTransaction {
             val period = dao.getPeriodById(periodId) ?: return@withTransaction
+            val config = dao.getConfigOnce() ?: ApartmentConfigEntity()
             dao.updatePeriod(
                 period.copy(
                     electricityTotalAmount = max(0.0, Formatters.round2(electricityAmount)),
+                    waterTotalAmount = if (config.waterIncludedInRent) 0.0 else max(0.0, Formatters.round2(waterAmount)),
                     prevMeterReading = max(0.0, prevReading),
                     currMeterReading = max(prevReading, currReading)
                 )
@@ -261,16 +265,19 @@ class SakanRepository(private val database: SakanDatabase) {
         year: Int,
         month: Int,
         electricityAmount: Double,
+        waterAmount: Double,
         prevReading: Double,
         currReading: Double
     ) {
         database.withTransaction {
             val config = dao.getConfigOnce() ?: ApartmentConfigEntity()
             val existing = dao.getPeriodsOnce().find { it.year == year && it.month == month }
+            val safeWater = if (config.waterIncludedInRent) 0.0 else max(0.0, Formatters.round2(waterAmount))
             if (existing != null) {
                 dao.updatePeriod(
                     existing.copy(
                         electricityTotalAmount = max(0.0, Formatters.round2(electricityAmount)),
+                        waterTotalAmount = safeWater,
                         prevMeterReading = max(0.0, prevReading),
                         currMeterReading = max(prevReading, currReading)
                     )
@@ -287,6 +294,7 @@ class SakanRepository(private val database: SakanDatabase) {
                         rentCycleTotalAmount = config.rentCycleAmount,
                         rentCycleMonths = config.rentCycleMonths,
                         electricityTotalAmount = max(0.0, Formatters.round2(electricityAmount)),
+                        waterTotalAmount = safeWater,
                         prevMeterReading = max(0.0, prevReading),
                         currMeterReading = max(prevReading, currReading),
                         isClosed = true
@@ -296,6 +304,7 @@ class SakanRepository(private val database: SakanDatabase) {
                 val count = max(1, activeResidents.size)
                 val rentShare = Formatters.round2(rentPool / count)
                 val elecShare = Formatters.round2(electricityAmount / count)
+                val waterShare = Formatters.round2(safeWater / count)
                 dao.insertLedgerEntries(
                     activeResidents.map { r ->
                         ResidentLedgerEntity(
@@ -303,8 +312,10 @@ class SakanRepository(private val database: SakanDatabase) {
                             residentId = r.id,
                             currentRentShare = rentShare,
                             currentElectricityShare = elecShare,
+                            currentWaterShare = waterShare,
                             paidRent = rentShare,
-                            paidElectricity = elecShare
+                            paidElectricity = elecShare,
+                            paidWater = waterShare
                         )
                     }
                 )
@@ -314,14 +325,15 @@ class SakanRepository(private val database: SakanDatabase) {
 
     private suspend fun recalculateOpenPeriodSharesInternal(periodId: Long) {
         val period = dao.getPeriodById(periodId) ?: return
+        val config = dao.getConfigOnce() ?: ApartmentConfigEntity()
         val activeResidents = dao.getActiveResidentsOnce()
         val existingLedgers = dao.getLedgerForPeriodOnce(periodId).associateBy { it.residentId }
 
         val activeIds = activeResidents.map { it.id }.toSet()
-        // Keep ledgers for inactive residents only if they have payments/previous balance, else remove
         val count = max(1, activeResidents.size)
         val rentShare = Formatters.round2(period.rentPoolAmount / count)
         val elecShare = Formatters.round2(period.electricityTotalAmount / count)
+        val waterShare = if (config.waterIncludedInRent) 0.0 else Formatters.round2(period.waterTotalAmount / count)
 
         val updatedEntries = mutableListOf<ResidentLedgerEntity>()
         for (resident in activeResidents) {
@@ -331,6 +343,7 @@ class SakanRepository(private val database: SakanDatabase) {
                     prev.copy(
                         currentRentShare = rentShare,
                         currentElectricityShare = elecShare,
+                        currentWaterShare = waterShare,
                         updatedAt = System.currentTimeMillis()
                     )
                 )
@@ -340,15 +353,23 @@ class SakanRepository(private val database: SakanDatabase) {
                         periodId = periodId,
                         residentId = resident.id,
                         currentRentShare = rentShare,
-                        currentElectricityShare = elecShare
+                        currentElectricityShare = elecShare,
+                        currentWaterShare = waterShare
                     )
                 )
             }
         }
-        // Preserve any inactive resident who still has balance/paid in this period
         for ((residentId, entry) in existingLedgers) {
-            if (residentId !in activeIds && (entry.totalPaid > 0.0 || entry.previousTotalBalance > 0.0)) {
-                updatedEntries.add(entry.copy(currentRentShare = 0.0, currentElectricityShare = 0.0))
+            if (residentId !in activeIds &&
+                (entry.totalPaid > 0.0 || entry.previousArrearsDebt > 0.0 || entry.previousAdvanceCredit > 0.0)
+            ) {
+                updatedEntries.add(
+                    entry.copy(
+                        currentRentShare = 0.0,
+                        currentElectricityShare = 0.0,
+                        currentWaterShare = 0.0
+                    )
+                )
             }
         }
         dao.deleteLedgerForPeriod(periodId)
@@ -362,42 +383,54 @@ class SakanRepository(private val database: SakanDatabase) {
         mode: PaymentAllocationMode,
         customRentPart: Double = 0.0,
         customElectricityPart: Double = 0.0,
+        customWaterPart: Double = 0.0,
         note: String = ""
     ) {
         database.withTransaction {
             val entry = dao.getLedgerById(ledgerId) ?: return@withTransaction
             val remRent = entry.remainingRent
             val remElec = entry.remainingElectricity
+            val remWater = entry.remainingWater
 
-            val (addRent, addElec) = when (mode) {
-                PaymentAllocationMode.FULL_REMAINING -> Pair(remRent, remElec)
-                PaymentAllocationMode.AUTO_ELECTRICITY_FIRST -> {
-                    val toElec = min(amountBrought, remElec)
-                    val leftover = max(0.0, amountBrought - toElec)
-                    val toRent = leftover // allow overpayment to reduce rent / credit
-                    Pair(Formatters.round2(toRent), Formatters.round2(toElec))
+            val (addRent, addElec, addWater) = when (mode) {
+                PaymentAllocationMode.FULL_REMAINING -> Triple(remRent, remElec, remWater)
+                PaymentAllocationMode.AUTO_UTILITIES_FIRST -> {
+                    var left = amountBrought
+                    val toElec = min(left, remElec)
+                    left = max(0.0, left - toElec)
+                    val toWater = min(left, remWater)
+                    left = max(0.0, left - toWater)
+                    // Any remaining amount (including advance prepayments for 2 or 3 months!) goes to Rent credit
+                    val toRent = left
+                    Triple(Formatters.round2(toRent), Formatters.round2(toElec), Formatters.round2(toWater))
                 }
                 PaymentAllocationMode.AUTO_RENT_FIRST -> {
-                    val toRent = min(amountBrought, remRent)
-                    val leftover = max(0.0, amountBrought - toRent)
-                    val toElec = leftover
-                    Pair(Formatters.round2(toRent), Formatters.round2(toElec))
+                    var left = amountBrought
+                    val toRent = min(left, remRent)
+                    left = max(0.0, left - toRent)
+                    val toElec = min(left, remElec)
+                    left = max(0.0, left - toElec)
+                    val toWater = left
+                    Triple(Formatters.round2(toRent), Formatters.round2(toElec), Formatters.round2(toWater))
                 }
-                PaymentAllocationMode.ELECTRICITY_ONLY -> Pair(0.0, Formatters.round2(amountBrought))
-                PaymentAllocationMode.RENT_ONLY -> Pair(Formatters.round2(amountBrought), 0.0)
-                PaymentAllocationMode.CUSTOM_SPLIT -> Pair(
+                PaymentAllocationMode.ELECTRICITY_ONLY -> Triple(0.0, Formatters.round2(amountBrought), 0.0)
+                PaymentAllocationMode.WATER_ONLY -> Triple(0.0, 0.0, Formatters.round2(amountBrought))
+                PaymentAllocationMode.RENT_ONLY -> Triple(Formatters.round2(amountBrought), 0.0, 0.0)
+                PaymentAllocationMode.CUSTOM_SPLIT -> Triple(
                     Formatters.round2(max(0.0, customRentPart)),
-                    Formatters.round2(max(0.0, customElectricityPart))
+                    Formatters.round2(max(0.0, customElectricityPart)),
+                    Formatters.round2(max(0.0, customWaterPart))
                 )
             }
 
-            val totalAdded = Formatters.round2(addRent + addElec)
+            val totalAdded = Formatters.round2(addRent + addElec + addWater)
             if (totalAdded <= 0.0) return@withTransaction
 
             dao.updateLedgerEntry(
                 entry.copy(
                     paidRent = Formatters.round2(entry.paidRent + addRent),
                     paidElectricity = Formatters.round2(entry.paidElectricity + addElec),
+                    paidWater = Formatters.round2(entry.paidWater + addWater),
                     note = if (note.isNotBlank()) note.trim() else entry.note,
                     updatedAt = System.currentTimeMillis()
                 )
@@ -411,6 +444,7 @@ class SakanRepository(private val database: SakanDatabase) {
                     amountPaid = totalAdded,
                     allocatedToRent = addRent,
                     allocatedToElectricity = addElec,
+                    allocatedToWater = addWater,
                     note = note.trim()
                 )
             )
@@ -425,12 +459,14 @@ class SakanRepository(private val database: SakanDatabase) {
                 val entry = dao.getLedgerById(id) ?: continue
                 val remRent = entry.remainingRent
                 val remElec = entry.remainingElectricity
-                val total = Formatters.round2(remRent + remElec)
+                val remWater = entry.remainingWater
+                val total = Formatters.round2(remRent + remElec + remWater)
                 if (total <= 0.01) continue
                 dao.updateLedgerEntry(
                     entry.copy(
                         paidRent = Formatters.round2(entry.paidRent + remRent),
                         paidElectricity = Formatters.round2(entry.paidElectricity + remElec),
+                        paidWater = Formatters.round2(entry.paidWater + remWater),
                         updatedAt = System.currentTimeMillis()
                     )
                 )
@@ -443,6 +479,7 @@ class SakanRepository(private val database: SakanDatabase) {
                         amountPaid = total,
                         allocatedToRent = remRent,
                         allocatedToElectricity = remElec,
+                        allocatedToWater = remWater,
                         note = "سداد كامل (دفعة جماعية)"
                     )
                 )
@@ -457,6 +494,7 @@ class SakanRepository(private val database: SakanDatabase) {
                 entry.copy(
                     paidRent = 0.0,
                     paidElectricity = 0.0,
+                    paidWater = 0.0,
                     updatedAt = System.currentTimeMillis()
                 )
             )
@@ -466,6 +504,7 @@ class SakanRepository(private val database: SakanDatabase) {
     suspend fun closePeriodAndRollover(
         currentPeriodId: Long,
         nextElectricityAmount: Double,
+        nextWaterAmount: Double,
         nextPrevReading: Double,
         nextCurrReading: Double,
         chargeRentInNewPeriod: Boolean = true
@@ -480,6 +519,7 @@ class SakanRepository(private val database: SakanDatabase) {
                 targetYear = nextYear,
                 targetMonth = nextMonth,
                 electricityAmount = nextElectricityAmount,
+                waterAmount = nextWaterAmount,
                 prevReading = nextPrevReading,
                 currReading = nextCurrReading,
                 config = config,
@@ -493,6 +533,7 @@ class SakanRepository(private val database: SakanDatabase) {
         targetYear: Int,
         targetMonth: Int,
         electricityAmount: Double,
+        waterAmount: Double,
         prevReading: Double,
         currReading: Double,
         config: ApartmentConfigEntity,
@@ -507,6 +548,8 @@ class SakanRepository(private val database: SakanDatabase) {
         val rentPool = if (chargeRent) computeRentPoolForPeriod(config) else 0.0
         val rentShare = Formatters.round2(rentPool / count)
         val elecShare = Formatters.round2(max(0.0, electricityAmount) / count)
+        val safeWater = if (config.waterIncludedInRent) 0.0 else max(0.0, Formatters.round2(waterAmount))
+        val waterShare = Formatters.round2(safeWater / count)
 
         val newPeriodId = dao.insertPeriod(
             BillingPeriodEntity(
@@ -517,6 +560,7 @@ class SakanRepository(private val database: SakanDatabase) {
                 rentCycleTotalAmount = config.rentCycleAmount,
                 rentCycleMonths = config.rentCycleMonths,
                 electricityTotalAmount = max(0.0, Formatters.round2(electricityAmount)),
+                waterTotalAmount = safeWater,
                 prevMeterReading = max(0.0, prevReading),
                 currMeterReading = max(prevReading, currReading),
                 isClosed = false
@@ -525,15 +569,19 @@ class SakanRepository(private val database: SakanDatabase) {
 
         val newEntries = activeResidents.map { resident ->
             val old = oldLedgers[resident.id]
-            val carryRent = Formatters.round2(old?.remainingRent ?: 0.0)
-            val carryElec = Formatters.round2(old?.remainingElectricity ?: 0.0)
+            // Signed carry-over: positive = unpaid debt, negative = advance credit paid ahead!
+            val carryRent = Formatters.round2(old?.netRentBalance ?: 0.0)
+            val carryElec = Formatters.round2(old?.netElectricityBalance ?: 0.0)
+            val carryWater = Formatters.round2(old?.netWaterBalance ?: 0.0)
             ResidentLedgerEntity(
                 periodId = newPeriodId,
                 residentId = resident.id,
                 previousRentBalance = carryRent,
                 previousElectricityBalance = carryElec,
+                previousWaterBalance = carryWater,
                 currentRentShare = rentShare,
-                currentElectricityShare = elecShare
+                currentElectricityShare = elecShare,
+                currentWaterShare = waterShare
             )
         }
         dao.insertLedgerEntries(newEntries)

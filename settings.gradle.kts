@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "SakanManager"
+rootProject.name = "Ezbah"
 
 include(":app")

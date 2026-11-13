@@ -7,11 +7,12 @@ import kotlin.math.max
 @Entity(tableName = "apartment_config")
 data class ApartmentConfigEntity(
     @PrimaryKey val id: Int = 1,
-    val apartmentName: String = "شقة الوالد",
+    val apartmentName: String = "عزبتنا",
     val roomCount: Int = 2,
     val rentCycleMonths: Int = 3,
-    val rentCycleAmount: Double = 5000.0,
+    val rentCycleAmount: Double = 4500.0,
     val collectRentMonthlyInstallment: Boolean = true,
+    val waterIncludedInRent: Boolean = true,
     val currencySymbol: String = "ر.س",
     val electricityDueDayOfMonth: Int = 25,
     val rentDueDayOfMonth: Int = 1,
@@ -40,6 +41,7 @@ data class BillingPeriodEntity(
     val rentCycleTotalAmount: Double,
     val rentCycleMonths: Int,
     val electricityTotalAmount: Double = 0.0,
+    val waterTotalAmount: Double = 0.0,
     val prevMeterReading: Double = 0.0,
     val currMeterReading: Double = 0.0,
     val isClosed: Boolean = false,
@@ -57,48 +59,80 @@ data class ResidentLedgerEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val periodId: Long,
     val residentId: Long,
+    // Signed balances from previous periods: >0 means debt owed, <0 means advance credit paid ahead
     val previousRentBalance: Double = 0.0,
     val previousElectricityBalance: Double = 0.0,
+    val previousWaterBalance: Double = 0.0,
     val currentRentShare: Double = 0.0,
     val currentElectricityShare: Double = 0.0,
+    val currentWaterShare: Double = 0.0,
     val paidRent: Double = 0.0,
     val paidElectricity: Double = 0.0,
+    val paidWater: Double = 0.0,
     val note: String = "",
     val updatedAt: Long = System.currentTimeMillis()
 ) {
-    val totalRentDue: Double
-        get() = previousRentBalance + currentRentShare
+    val netRentBalance: Double
+        get() = previousRentBalance + currentRentShare - paidRent
 
-    val totalElectricityDue: Double
-        get() = previousElectricityBalance + currentElectricityShare
+    val netElectricityBalance: Double
+        get() = previousElectricityBalance + currentElectricityShare - paidElectricity
 
-    val totalDue: Double
-        get() = totalRentDue + totalElectricityDue
-
-    val totalPaid: Double
-        get() = paidRent + paidElectricity
+    val netWaterBalance: Double
+        get() = previousWaterBalance + currentWaterShare - paidWater
 
     val remainingRent: Double
-        get() = max(0.0, totalRentDue - paidRent)
+        get() = max(0.0, netRentBalance)
 
     val remainingElectricity: Double
-        get() = max(0.0, totalElectricityDue - paidElectricity)
+        get() = max(0.0, netElectricityBalance)
+
+    val remainingWater: Double
+        get() = max(0.0, netWaterBalance)
+
+    val creditRent: Double
+        get() = max(0.0, -netRentBalance)
+
+    val creditElectricity: Double
+        get() = max(0.0, -netElectricityBalance)
+
+    val creditWater: Double
+        get() = max(0.0, -netWaterBalance)
+
+    val totalAdvanceCredit: Double
+        get() = creditRent + creditElectricity + creditWater
 
     val totalRemaining: Double
-        get() = remainingRent + remainingElectricity
+        get() = remainingRent + remainingElectricity + remainingWater
 
-    val previousTotalBalance: Double
-        get() = previousRentBalance + previousElectricityBalance
+    val totalCurrentCharges: Double
+        get() = currentRentShare + currentElectricityShare + currentWaterShare
+
+    val previousArrearsDebt: Double
+        get() = max(0.0, previousRentBalance) + max(0.0, previousElectricityBalance) + max(0.0, previousWaterBalance)
+
+    val previousAdvanceCredit: Double
+        get() = max(0.0, -previousRentBalance) + max(0.0, -previousElectricityBalance) + max(0.0, -previousWaterBalance)
+
+    val totalDue: Double
+        get() = max(0.0, previousRentBalance + currentRentShare) +
+            max(0.0, previousElectricityBalance + currentElectricityShare) +
+            max(0.0, previousWaterBalance + currentWaterShare)
+
+    val totalPaid: Double
+        get() = paidRent + paidElectricity + paidWater
 
     val paymentStatus: PaymentStatus
         get() = when {
+            totalRemaining <= 0.05 && totalAdvanceCredit > 0.05 -> PaymentStatus.ADVANCE_CREDIT
             totalRemaining <= 0.05 -> PaymentStatus.PAID
-            totalPaid > 0.05 -> PaymentStatus.PARTIAL
+            totalPaid > 0.05 || previousAdvanceCredit > 0.05 -> PaymentStatus.PARTIAL
             else -> PaymentStatus.UNPAID
         }
 }
 
 enum class PaymentStatus {
+    ADVANCE_CREDIT,
     PAID,
     PARTIAL,
     UNPAID
@@ -113,6 +147,7 @@ data class PaymentTransactionEntity(
     val amountPaid: Double,
     val allocatedToRent: Double,
     val allocatedToElectricity: Double,
+    val allocatedToWater: Double = 0.0,
     val note: String = "",
     val paidAt: Long = System.currentTimeMillis()
 )
@@ -124,9 +159,10 @@ data class ResidentLedgerWithDetails(
 
 enum class PaymentAllocationMode {
     FULL_REMAINING,
-    AUTO_ELECTRICITY_FIRST,
+    AUTO_UTILITIES_FIRST,
     AUTO_RENT_FIRST,
     ELECTRICITY_ONLY,
+    WATER_ONLY,
     RENT_ONLY,
     CUSTOM_SPLIT
 }

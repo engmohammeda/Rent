@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,16 +47,16 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.data.local.BillingPeriodEntity
 import com.example.ui.MainUiState
-import com.example.ui.components.ElectricityBillDialog
-import com.example.ui.theme.AmberSecondary
-import com.example.ui.theme.EmeraldPrimary
+import com.example.ui.components.UtilitiesBillDialog
+import com.example.ui.theme.EzbahGold
+import com.example.ui.theme.EzbahTeal
+import com.example.ui.theme.StatusAdvance
+import com.example.ui.theme.StatusAdvanceContainer
 import com.example.ui.theme.StatusPaid
 import com.example.ui.theme.StatusPaidContainer
 import com.example.ui.theme.StatusUnpaid
@@ -68,11 +69,12 @@ import kotlin.math.max
 @Composable
 fun ElectricityAnalyticsScreen(
     state: MainUiState,
-    onUpdateCurrentElectricity: (periodId: Long, amount: Double, prev: Double, curr: Double) -> Unit,
-    onAddHistoricalElectricity: (year: Int, month: Int, amount: Double, prev: Double, curr: Double) -> Unit,
+    onUpdateCurrentUtilities: (periodId: Long, elecAmount: Double, waterAmount: Double, prev: Double, curr: Double) -> Unit,
+    onAddHistoricalElectricity: (year: Int, month: Int, elecAmount: Double, waterAmount: Double, prev: Double, curr: Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currency = state.config.currencySymbol
+    val waterIncluded = state.config.waterIncludedInRent
     val analytics = state.analytics
     val currentPeriod = analytics.currentPeriod
     val prevPeriod = analytics.previousPeriod
@@ -88,7 +90,7 @@ fun ElectricityAnalyticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 720.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -98,9 +100,12 @@ fun ElectricityAnalyticsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("تحليل الكهرباء والعداد", style = MaterialTheme.typography.headlineSmall)
                         Text(
-                            "مقارنة التكاليف والاستهلاك بين الشهور",
+                            text = if (waterIncluded) "تحليل الكهرباء والعداد" else "تحليل الكهرباء والماء",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Text(
+                            text = "مقارنة الفواتير وقراءة العداد بين الشهور",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -119,9 +124,9 @@ fun ElectricityAnalyticsScreen(
             // Current vs Previous Comparison Card
             item {
                 Card(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -133,12 +138,21 @@ fun ElectricityAnalyticsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.ElectricBolt,
-                                    contentDescription = null,
-                                    tint = AmberSecondary
-                                )
-                                Spacer(Modifier.width(6.dp))
+                                Surface(
+                                    color = EzbahGold.copy(alpha = 0.14f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.ElectricBolt,
+                                            contentDescription = null,
+                                            tint = EzbahGold,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
                                 Text(
                                     "فاتورة ${currentPeriod?.label ?: "الشهر الحالي"}",
                                     style = MaterialTheme.typography.titleMedium
@@ -152,7 +166,7 @@ fun ElectricityAnalyticsScreen(
                                 ) {
                                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("تعديل القراءة")
+                                    Text("تعديل الفاتورة")
                                 }
                             }
                         }
@@ -169,7 +183,7 @@ fun ElectricityAnalyticsScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    "نصيب الفرد (${state.activeResidentsCount} سكان): ${Formatters.formatMoney((currentPeriod?.electricityTotalAmount ?: 0.0) / state.activeResidentsCount, currency)}",
+                                    "نصيب الفرد كهرباء (${state.activeResidentsCount} سكان): ${Formatters.formatMoney((currentPeriod?.electricityTotalAmount ?: 0.0) / state.activeResidentsCount, currency)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -198,6 +212,41 @@ fun ElectricityAnalyticsScreen(
                                             color = badgeFg
                                         )
                                     }
+                                }
+                            }
+                        }
+
+                        if (!waterIncluded) {
+                            Surface(
+                                color = StatusAdvanceContainer.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.WaterDrop,
+                                            contentDescription = null,
+                                            tint = StatusAdvance,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "فاتورة الماء (مستقلة عن الإيجار)",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = StatusAdvance
+                                        )
+                                    }
+                                    Text(
+                                        "${Formatters.formatMoney(currentPeriod?.waterTotalAmount ?: 0.0, currency)} (للفرد ${Formatters.formatMoney(state.waterPerPerson)})",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = StatusAdvance,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
@@ -274,9 +323,9 @@ fun ElectricityAnalyticsScreen(
             if (currentPeriod != null) {
                 item {
                     Card(
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -310,9 +359,9 @@ fun ElectricityAnalyticsScreen(
             // Monthly Comparison Bar Chart (Custom Canvas)
             item {
                 Card(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -336,8 +385,8 @@ fun ElectricityAnalyticsScreen(
                             }
                         } else {
                             val maxAmount = max(1.0, chartPeriods.maxOf { it.electricityTotalAmount })
-                            val barPrimary = MaterialTheme.colorScheme.primary
-                            val barSecondary = AmberSecondary
+                            val barPrimary = EzbahTeal
+                            val barSecondary = EzbahGold
                             val trackColor = MaterialTheme.colorScheme.surfaceVariant
 
                             Row(
@@ -378,7 +427,7 @@ fun ElectricityAnalyticsScreen(
                                             val topY = size.height - barH
                                             drawRoundRect(
                                                 brush = Brush.verticalGradient(
-                                                    colors = if (isSelected) listOf(barSecondary, EmeraldPrimary)
+                                                    colors = if (isSelected) listOf(barSecondary, barPrimary)
                                                     else listOf(barPrimary.copy(alpha = 0.85f), barPrimary.copy(alpha = 0.55f))
                                                 ),
                                                 topLeft = Offset(0f, topY),
@@ -407,8 +456,11 @@ fun ElectricityAnalyticsScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(sel.label, style = MaterialTheme.typography.labelLarge)
+                                        val waterInfo = if (!waterIncluded && sel.waterTotalAmount > 0.0) {
+                                            " • ماء ${Formatters.formatMoney(sel.waterTotalAmount, currency)}"
+                                        } else ""
                                         Text(
-                                            "${Formatters.formatMoney(sel.electricityTotalAmount, currency)} • ${Formatters.formatKwh(sel.consumptionKwh)}",
+                                            "${Formatters.formatMoney(sel.electricityTotalAmount, currency)}$waterInfo • ${Formatters.formatKwh(sel.consumptionKwh)}",
                                             style = MaterialTheme.typography.labelMedium
                                         )
                                     }
@@ -445,14 +497,14 @@ fun ElectricityAnalyticsScreen(
 
             // History list header
             item {
-                Text("سجل فواتير الكهرباء الشهرية", style = MaterialTheme.typography.titleMedium)
+                Text("سجل الفواتير الشهرية", style = MaterialTheme.typography.titleMedium)
             }
 
             items(state.periods, key = { it.id }) { period ->
                 Card(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -462,19 +514,26 @@ fun ElectricityAnalyticsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(period.label, style = MaterialTheme.typography.titleSmall)
                             Text(
                                 "قراءة: ${Formatters.round2(period.prevMeterReading)} ← ${Formatters.round2(period.currMeterReading)} (${Formatters.formatKwh(period.consumptionKwh)})",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (!waterIncluded && period.waterTotalAmount > 0.0) {
+                                Text(
+                                    "ماء: ${Formatters.formatMoney(period.waterTotalAmount, currency)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = StatusAdvance
+                                )
+                            }
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 Formatters.formatMoney(period.electricityTotalAmount, currency),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = AmberSecondary,
+                                color = EzbahGold,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
@@ -492,19 +551,21 @@ fun ElectricityAnalyticsScreen(
     }
 
     if (showEditCurrentDialog && currentPeriod != null) {
-        ElectricityBillDialog(
+        UtilitiesBillDialog(
             initialYear = currentPeriod.year,
             initialMonth = currentPeriod.month,
-            initialAmount = currentPeriod.electricityTotalAmount,
+            initialElecAmount = currentPeriod.electricityTotalAmount,
+            initialWaterAmount = currentPeriod.waterTotalAmount,
             initialPrevReading = currentPeriod.prevMeterReading,
             initialCurrReading = currentPeriod.currMeterReading,
+            waterIncludedInRent = waterIncluded,
             activeResidentsCount = state.activeResidentsCount,
             currency = currency,
             allowMonthSelection = false,
             onDismiss = { showEditCurrentDialog = false },
-            onSave = { _, _, amt, prev, curr ->
+            onSave = { _, _, elecAmt, waterAmt, prev, curr ->
                 showEditCurrentDialog = false
-                onUpdateCurrentElectricity(currentPeriod.id, amt, prev, curr)
+                onUpdateCurrentUtilities(currentPeriod.id, elecAmt, waterAmt, prev, curr)
             }
         )
     }
@@ -515,19 +576,21 @@ fun ElectricityAnalyticsScreen(
             currentPeriod?.year ?: cal.get(Calendar.YEAR),
             currentPeriod?.month ?: (cal.get(Calendar.MONTH) + 1)
         )
-        ElectricityBillDialog(
+        UtilitiesBillDialog(
             initialYear = py,
             initialMonth = pm,
-            initialAmount = 0.0,
+            initialElecAmount = 0.0,
+            initialWaterAmount = 0.0,
             initialPrevReading = 0.0,
             initialCurrReading = 0.0,
+            waterIncludedInRent = waterIncluded,
             activeResidentsCount = state.activeResidentsCount,
             currency = currency,
             allowMonthSelection = true,
             onDismiss = { showAddHistoryDialog = false },
-            onSave = { y, m, amt, prev, curr ->
+            onSave = { y, m, elecAmt, waterAmt, prev, curr ->
                 showAddHistoryDialog = false
-                onAddHistoricalElectricity(y, m, amt, prev, curr)
+                onAddHistoricalElectricity(y, m, elecAmt, waterAmt, prev, curr)
             }
         )
     }

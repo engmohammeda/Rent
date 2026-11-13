@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         ResidentLedgerEntity::class,
         PaymentTransactionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class SakanDatabase : RoomDatabase() {
@@ -28,8 +28,11 @@ abstract class SakanDatabase : RoomDatabase() {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     SakanDatabase::class.java,
-                    "sakan_manager.db"
-                ).build().also { INSTANCE = it }
+                    "ezbah_manager.db"
+                )
+                    .fallbackToDestructiveMigration(true)
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }

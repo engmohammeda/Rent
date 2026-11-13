@@ -9,39 +9,77 @@ import com.example.data.local.BillingPeriodEntity
 import com.example.data.local.ResidentLedgerWithDetails
 import java.net.URLEncoder
 
+enum class ReminderTone(val label: String) {
+    NATURAL("ودي وطبيعي"),
+    SHORT("مختصر وسريع")
+}
+
 object WhatsAppHelper {
 
     fun buildResidentReminderMessage(
         item: ResidentLedgerWithDetails,
         period: BillingPeriodEntity,
-        config: ApartmentConfigEntity
+        config: ApartmentConfigEntity,
+        tone: ReminderTone = ReminderTone.NATURAL
     ): String {
         val currency = config.currencySymbol
         val ledger = item.ledger
         val resident = item.resident
+        val ezbah = config.apartmentName
+
+        // Advance credit case (paid ahead for upcoming months)
+        if (ledger.totalRemaining <= 0.05 && ledger.totalAdvanceCredit > 0.05) {
+            return "مساك الله بالخير أخي ${resident.name}، حبيت أطمنك إن حسابك في $ezbah لشهر ${period.label} تمام وما عليك أي متبقي حالياً، وعندك رصيد مدفوع مقدماً قدره ${Formatters.formatMoney(ledger.totalAdvanceCredit, currency)} يغطي الفترة الجاية. الله يبارك فيك."
+        }
+
+        // Completely paid
+        if (ledger.totalRemaining <= 0.05) {
+            return "مساك الله بالخير أخي ${resident.name}، يعطيك العافية تم تأكيد سداد كامل مستحقاتك في $ezbah لشهر ${period.label}."
+        }
+
+        if (tone == ReminderTone.SHORT) {
+            return buildString {
+                appendLine("مساك الله بالخير أخي ${resident.name}،")
+                appendLine("مستحقات $ezbah لشهر ${period.label}:")
+                if (ledger.remainingRent > 0.05) {
+                    appendLine("السكن: ${Formatters.formatMoney(ledger.remainingRent, currency)}")
+                }
+                if (ledger.remainingElectricity > 0.05) {
+                    appendLine("الكهرباء: ${Formatters.formatMoney(ledger.remainingElectricity, currency)}")
+                }
+                if (!config.waterIncludedInRent && ledger.remainingWater > 0.05) {
+                    appendLine("الماء: ${Formatters.formatMoney(ledger.remainingWater, currency)}")
+                }
+                append("المطلوب: ${Formatters.formatMoney(ledger.totalRemaining, currency)} — أرسل المتيسر لك الله يعطيك العافية.")
+            }
+        }
 
         return buildString {
-            appendLine("السلام عليكم أخي ${resident.name}،")
-            appendLine("تذكير بمستحقات ${config.apartmentName} (غرفة ${resident.roomNumber}) لشهر ${period.label}:")
-            appendLine("━━━━━━━━━━━━━━")
-            appendLine("🏠 السكن (الشهر الحالي): ${Formatters.formatMoney(ledger.currentRentShare, currency)}")
-            if (ledger.previousRentBalance > 0.05) {
-                appendLine("↩️ متبقي سكن سابق: ${Formatters.formatMoney(ledger.previousRentBalance, currency)}")
+            appendLine("مساك الله بالخير أخي ${resident.name}،")
+            appendLine("كوننا بدأنا التحصيل في $ezbah لشهر ${period.label}، حبيت أذكرك بتفاصيل حسابك:")
+            appendLine()
+            if (ledger.remainingRent > 0.05) {
+                appendLine("• السكن: ${Formatters.formatMoney(ledger.remainingRent, currency)}")
             }
-            appendLine("⚡ الكهرباء (الشهر الحالي): ${Formatters.formatMoney(ledger.currentElectricityShare, currency)}")
-            if (ledger.previousElectricityBalance > 0.05) {
-                appendLine("↩️ متبقي كهرباء سابق: ${Formatters.formatMoney(ledger.previousElectricityBalance, currency)}")
+            if (ledger.remainingElectricity > 0.05) {
+                appendLine("• الكهرباء: ${Formatters.formatMoney(ledger.remainingElectricity, currency)}")
+            }
+            if (!config.waterIncludedInRent && ledger.remainingWater > 0.05) {
+                appendLine("• الماء: ${Formatters.formatMoney(ledger.remainingWater, currency)}")
+            }
+            if (ledger.previousArrearsDebt > 0.05) {
+                appendLine("• (تشمل متبقي من الشهر السابق: ${Formatters.formatMoney(ledger.previousArrearsDebt, currency)})")
             }
             if (ledger.totalPaid > 0.05) {
-                appendLine("✅ المدفوع حتى الآن: ${Formatters.formatMoney(ledger.totalPaid, currency)}")
+                appendLine("• المدفوع حتى الآن: ${Formatters.formatMoney(ledger.totalPaid, currency)}")
             }
-            appendLine("━━━━━━━━━━━━━━")
-            appendLine("💰 الإجمالي المتبقي عليك: ${Formatters.formatMoney(ledger.totalRemaining, currency)}")
-            if (config.rentCycleMonths > 1 && !config.collectRentMonthlyInstallment) {
-                val monthlyEquiv = ledger.currentRentShare / config.rentCycleMonths
-                appendLine("📌 (ملاحظة: حصة الشهر الواحد من الإيجار هي ${Formatters.formatMoney(monthlyEquiv, currency)})")
+            appendLine()
+            appendLine("المطلوب حالياً: ${Formatters.formatMoney(ledger.totalRemaining, currency)}")
+            if (config.rentCycleMonths > 1 && config.collectRentMonthlyInstallment) {
+                append("تقدر تدفع قسط الشهر أو تدفع حق شهرين أو الثلاثة أشهر مرة واحدة أو حسب المتوفر عندك الآن، الله يبارك فيك.")
+            } else {
+                append("تقدر تدفع المبلغ كامل أو حسب استطاعتك حالياً، الله يبارك فيك ويعطيك العافية.")
             }
-            appendLine("جزاكم الله خيراً على تعاونكم.")
         }
     }
 
@@ -57,21 +95,27 @@ object WhatsAppHelper {
         val unpaid = items.filter { it.ledger.totalRemaining > 0.05 }
 
         return buildString {
-            appendLine("📋 ملخص ${config.apartmentName} - ${period.label}")
-            appendLine("⚡ فاتورة الكهرباء: ${Formatters.formatMoney(period.electricityTotalAmount, currency)} (${Formatters.formatKwh(period.consumptionKwh)})")
-            appendLine("🏠 حصة الإيجار للفترة: ${Formatters.formatMoney(period.rentPoolAmount, currency)}")
-            appendLine("✅ المحصل: ${Formatters.formatMoney(totalPaid, currency)} من ${Formatters.formatMoney(totalDue, currency)}")
-            appendLine("⏳ المتبقي للتحصيل: ${Formatters.formatMoney(totalRemaining, currency)}")
+            appendLine("مساء الخير للجميع، ملخص حسابات ${config.apartmentName} لشهر ${period.label}:")
+            appendLine("• حصة السكن للفترة: ${Formatters.formatMoney(period.rentPoolAmount, currency)}")
+            appendLine("• فاتورة الكهرباء: ${Formatters.formatMoney(period.electricityTotalAmount, currency)}")
+            if (!config.waterIncludedInRent) {
+                appendLine("• فاتورة الماء: ${Formatters.formatMoney(period.waterTotalAmount, currency)}")
+            } else {
+                appendLine("• الماء: مشمول ضمن الإيجار")
+            }
+            appendLine("• المحصّل حتى الآن: ${Formatters.formatMoney(totalPaid, currency)} من أصل ${Formatters.formatMoney(totalDue, currency)}")
+            appendLine("• المتبقي للتحصيل: ${Formatters.formatMoney(totalRemaining, currency)}")
             if (unpaid.isNotEmpty()) {
-                appendLine("━━━━━━━━━━━━━━")
-                appendLine("المتأخرات / المستحقات المتبقية:")
+                appendLine()
+                appendLine("المتبقي على الإخوة:")
                 unpaid.forEach { entry ->
                     val r = entry.resident
                     val l = entry.ledger
-                    appendLine("• ${r.name} (غ${r.roomNumber}): ${Formatters.formatMoney(l.totalRemaining, currency)} [سكن: ${Formatters.formatMoney(l.remainingRent)} | كهرباء: ${Formatters.formatMoney(l.remainingElectricity)}]")
+                    appendLine("- ${r.name} (غرفة ${r.roomNumber}): ${Formatters.formatMoney(l.totalRemaining, currency)}")
                 }
             } else {
-                appendLine("🎉 تم سداد جميع المستحقات بالكامل!")
+                appendLine()
+                appendLine("الحمد لله، الجميع مسدد بالكامل لهذه الفترة.")
             }
         }
     }
@@ -93,7 +137,7 @@ object WhatsAppHelper {
                 context.startActivity(intent)
                 return
             } catch (_: Exception) {
-                // Fallback to share sheet below
+                // Fallback below
             }
         }
 

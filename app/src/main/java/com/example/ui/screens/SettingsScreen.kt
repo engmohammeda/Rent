@@ -26,18 +26,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.data.local.ApartmentConfigEntity
 import com.example.ui.MainUiState
+import com.example.ui.theme.EzbahGold
+import com.example.ui.theme.StatusAdvance
 import com.example.ui.theme.StatusPaid
 import com.example.utils.Formatters
 
@@ -75,6 +80,7 @@ fun SettingsScreen(
     var rentAmountText by remember(cfg) { mutableStateOf(Formatters.round2(cfg.rentCycleAmount).toString()) }
     var rentCycleMonths by remember(cfg) { mutableIntStateOf(cfg.rentCycleMonths) }
     var collectMonthly by remember(cfg) { mutableStateOf(cfg.collectRentMonthlyInstallment) }
+    var waterIncludedInRent by remember(cfg) { mutableStateOf(cfg.waterIncludedInRent) }
     var currency by remember(cfg) { mutableStateOf(cfg.currencySymbol) }
 
     var notificationsEnabled by remember(cfg) { mutableStateOf(cfg.notificationsEnabled) }
@@ -97,41 +103,54 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 720.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 Column {
-                    Text("الإعدادات والتنبيهات", style = MaterialTheme.typography.headlineSmall)
+                    Text("إعدادات العزبة والتنبيهات", style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        "تخصيص الإيجار، مواعيد التذكير، وسجل المدفوعات",
+                        "خصص اسم العزبة، الغرف، الإيجار، الماء، ومواعيد التذكير",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // Apartment & Rent Config Card
+            // Ezbah & Rent Config Card
             item {
                 Card(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Apartment, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Apartment,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                             Spacer(Modifier.width(8.dp))
-                            Text("إعدادات الشقة والإيجار", style = MaterialTheme.typography.titleMedium)
+                            Text("تخصيص العزبة والإيجار والماء", style = MaterialTheme.typography.titleMedium)
                         }
 
                         OutlinedTextField(
                             value = apartmentName,
                             onValueChange = { apartmentName = it },
-                            label = { Text("اسم الشقة") },
+                            label = { Text("اسم العزبة أو السكن") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -156,17 +175,20 @@ fun SettingsScreen(
                         }
 
                         Text("دورة الإيجار:", style = MaterialTheme.typography.labelLarge)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = rentCycleMonths == 3,
-                                onClick = { rentCycleMonths = 3 },
-                                label = { Text("كل 3 أشهر (ربع سنوي)") }
-                            )
-                            FilterChip(
-                                selected = rentCycleMonths == 1,
-                                onClick = { rentCycleMonths = 1 },
-                                label = { Text("كل شهر") }
-                            )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                1 to "شهري",
+                                2 to "كل شهرين",
+                                3 to "كل 3 أشهر",
+                                6 to "كل 6 أشهر",
+                                12 to "سنوي"
+                            ).forEach { (months, label) ->
+                                FilterChip(
+                                    selected = rentCycleMonths == months,
+                                    onClick = { rentCycleMonths = months },
+                                    label = { Text(label) }
+                                )
+                            }
                         }
 
                         if (rentCycleMonths > 1) {
@@ -178,8 +200,8 @@ fun SettingsScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text("تقسيم الإيجار على أقساط شهرية", style = MaterialTheme.typography.bodyMedium)
                                     Text(
-                                        if (collectMonthly) "يُحسب ثلث الإيجار شهرياً (مثلاً 5000 ÷ 3)"
-                                        else "يُطلب كامل إيجار الـ 3 أشهر مع عرض القسط الشهري للمساعدة",
+                                        if (collectMonthly) "يُقسم إيجار الدورة على $rentCycleMonths أشهر (مثلاً 4,500 ÷ $rentCycleMonths)"
+                                        else "يُطلب كامل إيجار الدورة دفعة واحدة",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -188,9 +210,44 @@ fun SettingsScreen(
                             }
                         }
 
+                        HorizontalDivider()
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.WaterDrop,
+                                    contentDescription = null,
+                                    tint = StatusAdvance,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text("الماء مشمول ضمن الإيجار", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        if (waterIncludedInRent) "لا تُضاف فاتورة ماء منفصلة على السكان"
+                                        else "تُضاف فاتورة الماء شهرياً وتُقسم بالتساوي مثل الكهرباء",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = waterIncludedInRent,
+                                onCheckedChange = { waterIncludedInRent = it },
+                                modifier = Modifier.testTag("water_included_switch")
+                            )
+                        }
+
                         Text("العملة:", style = MaterialTheme.typography.labelLarge)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("ر.س", "ر.ي", "ج.م", "د.إ", "د.أ", "$").forEach { sym ->
+                            listOf("ر.س", "ر.ي", "ج.م", "د.إ", "د.أ", "د.ك", "$").forEach { sym ->
                                 FilterChip(
                                     selected = currency == sym,
                                     onClick = { currency = sym },
@@ -205,20 +262,29 @@ fun SettingsScreen(
             // Notifications & Auto-Rollover Card
             item {
                 Card(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary
-                            )
+                            Surface(
+                                color = EzbahGold.copy(alpha = 0.14f),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.NotificationsActive,
+                                        contentDescription = null,
+                                        tint = EzbahGold,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                             Spacer(Modifier.width(8.dp))
                             Text("إشعارات المالك والترحيل التلقائي", style = MaterialTheme.typography.titleMedium)
                         }
@@ -229,9 +295,9 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("تفعيل إشعارات المتابعة للمالك", style = MaterialTheme.typography.bodyMedium)
+                                Text("تفعيل إشعارات المتابعة", style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    "تذكيرك بقرب موعد الكهرباء والإيجار والمتبقي حتى يتم السداد بالكامل",
+                                    "تذكيرك بمواعيد الكهرباء والإيجار والمتبقي حتى اكتمال السداد",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -292,7 +358,7 @@ fun SettingsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("ترحيل تلقائي عند بداية شهر جديد", style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    "يرحّل المبالغ غير المدفوعة تلقائياً إلى الشهر الجديد",
+                                    "يرحّل المتبقي غير المدفوع أو الأرصدة المدفوعة مقدماً تلقائياً",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -327,11 +393,12 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     val updated = cfg.copy(
-                                        apartmentName = apartmentName.ifBlank { "شقة الوالد" },
+                                        apartmentName = apartmentName.ifBlank { "عزبتنا" },
                                         roomCount = (roomCountText.toIntOrNull() ?: 2).coerceIn(1, 20),
-                                        rentCycleAmount = (rentAmountText.toDoubleOrNull() ?: 5000.0).coerceAtLeast(0.0),
+                                        rentCycleAmount = (rentAmountText.toDoubleOrNull() ?: 4500.0).coerceAtLeast(0.0),
                                         rentCycleMonths = rentCycleMonths,
                                         collectRentMonthlyInstallment = collectMonthly,
+                                        waterIncludedInRent = waterIncludedInRent,
                                         currencySymbol = currency,
                                         electricityDueDayOfMonth = (elecDueDayText.toIntOrNull() ?: 25).coerceIn(1, 28),
                                         rentDueDayOfMonth = (rentDueDayText.toIntOrNull() ?: 1).coerceIn(1, 28),
@@ -358,7 +425,11 @@ fun SettingsScreen(
             // Recent Payment Transactions Log
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        Icons.AutoMirrored.Filled.ReceiptLong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         "سجل الدفعات المستلمة (${state.allTransactions.size})",
@@ -387,7 +458,7 @@ fun SettingsScreen(
             } else {
                 items(state.allTransactions.take(25), key = { it.id }) { tx ->
                     Card(
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
                         modifier = Modifier.fillMaxWidth()
@@ -401,8 +472,11 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(tx.residentNameSnapshot, style = MaterialTheme.typography.titleSmall)
+                                val waterTxt = if (tx.allocatedToWater > 0.01) {
+                                    " • ماء: ${Formatters.formatMoney(tx.allocatedToWater)}"
+                                } else ""
                                 Text(
-                                    "سكن: ${Formatters.formatMoney(tx.allocatedToRent)} • كهرباء: ${Formatters.formatMoney(tx.allocatedToElectricity)}",
+                                    "سكن: ${Formatters.formatMoney(tx.allocatedToRent)} • كهرباء: ${Formatters.formatMoney(tx.allocatedToElectricity)}$waterTxt",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

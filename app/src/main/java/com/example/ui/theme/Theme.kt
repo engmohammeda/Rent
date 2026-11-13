@@ -14,18 +14,18 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 private val DarkColorScheme = darkColorScheme(
-    primary = EmeraldLight,
-    onPrimary = OnEmeraldContainer,
-    primaryContainer = EmeraldPrimaryDark,
-    onPrimaryContainer = EmeraldContainer,
-    secondary = AmberSecondary,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFF4A2B05),
-    onSecondaryContainer = AmberContainer,
+    primary = EzbahTealLight,
+    onPrimary = OnEzbahTealContainer,
+    primaryContainer = EzbahTeal,
+    onPrimaryContainer = EzbahTealContainer,
+    secondary = EzbahGoldLight,
+    onSecondary = OnEzbahGoldContainer,
+    secondaryContainer = Color(0xFF4A310B),
+    onSecondaryContainer = EzbahGoldContainer,
     tertiary = Color(0xFF93C5FD),
-    onTertiary = OnSlateContainer,
-    tertiaryContainer = SlateTertiary,
-    onTertiaryContainer = SlateContainer,
+    onTertiary = OnEzbahNavyContainer,
+    tertiaryContainer = EzbahNavy,
+    onTertiaryContainer = EzbahNavyContainer,
     background = DarkBackground,
     onBackground = Color(0xFFF1F5F9),
     surface = DarkSurface,
@@ -36,18 +36,18 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = EmeraldPrimary,
+    primary = EzbahTeal,
     onPrimary = Color.White,
-    primaryContainer = EmeraldContainer,
-    onPrimaryContainer = OnEmeraldContainer,
-    secondary = AmberSecondary,
+    primaryContainer = EzbahTealContainer,
+    onPrimaryContainer = OnEzbahTealContainer,
+    secondary = EzbahGold,
     onSecondary = Color.White,
-    secondaryContainer = AmberContainer,
-    onSecondaryContainer = OnAmberContainer,
-    tertiary = SlateTertiary,
+    secondaryContainer = EzbahGoldContainer,
+    onSecondaryContainer = OnEzbahGoldContainer,
+    tertiary = EzbahNavy,
     onTertiary = Color.White,
-    tertiaryContainer = SlateContainer,
-    onTertiaryContainer = OnSlateContainer,
+    tertiaryContainer = EzbahNavyContainer,
+    onTertiaryContainer = OnEzbahNavyContainer,
     background = LightBackground,
     onBackground = Color(0xFF0F172A),
     surface = LightSurface,
@@ -58,14 +58,14 @@ private val LightColorScheme = lightColorScheme(
 )
 
 val AppShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(18.dp),
     large = RoundedCornerShape(24.dp),
     extraLarge = RoundedCornerShape(28.dp)
 )
 
 @Composable
-fun SakanTheme(
+fun EzbahTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {

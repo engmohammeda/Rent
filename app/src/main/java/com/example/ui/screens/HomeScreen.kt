@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,7 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckCircle
@@ -40,7 +40,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -57,6 +58,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -74,17 +76,23 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.local.PaymentStatus
 import com.example.data.local.ResidentLedgerWithDetails
 import com.example.ui.MainUiState
-import com.example.ui.theme.EmeraldPrimary
-import com.example.ui.theme.EmeraldPrimaryDark
-import com.example.ui.theme.SlateTertiary
+import com.example.ui.theme.EzbahGold
+import com.example.ui.theme.EzbahGoldLight
+import com.example.ui.theme.EzbahTeal
+import com.example.ui.theme.EzbahTealDeep
+import com.example.ui.theme.StatusAdvance
+import com.example.ui.theme.StatusAdvanceContainer
 import com.example.ui.theme.StatusPaid
 import com.example.ui.theme.StatusPaidContainer
 import com.example.ui.theme.StatusPartial
@@ -106,7 +114,7 @@ fun HomeScreen(
     onSelectAllUnpaid: () -> Unit,
     onBatchPaySelected: () -> Unit,
     onOpenPaymentSheet: (ResidentLedgerWithDetails) -> Unit,
-    onOpenElectricityDialog: () -> Unit,
+    onOpenUtilitiesDialog: () -> Unit,
     onOpenRolloverDialog: () -> Unit,
     onOpenWhatsAppQueue: () -> Unit,
     modifier: Modifier = Modifier
@@ -121,10 +129,10 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 720.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Top Header Row
+            // Top Executive Brand Bar
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -133,19 +141,16 @@ fun HomeScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.size(44.dp)
+                            shape = RoundedCornerShape(14.dp),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.size(46.dp)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Apartment,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
+                            Image(
+                                painter = painterResource(id = R.mipmap.ic_launcher),
+                                contentDescription = "شعار عزبة"
+                            )
                         }
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(12.dp))
                         Column {
                             Text(
                                 text = state.config.apartmentName,
@@ -154,31 +159,44 @@ fun HomeScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${state.activeResidentsCount} ساكن • ${state.config.roomCount} غرف",
+                                text = "${state.activeResidentsCount} ساكن • ${state.config.roomCount} غرف • " +
+                                    if (state.config.waterIncludedInRent) "الماء مشمول" else "ماء منفصل",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    // Period Selector
                     Box {
-                        FilledTonalButton(
+                        Surface(
                             onClick = { periodMenuExpanded = true },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.testTag("period_selector_button")
                         ) {
-                            Icon(
-                                Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = currentPeriod?.label ?: "الشهر الحالي",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            Icon(Icons.Default.ExpandMore, contentDescription = "اختيار الشهر")
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = currentPeriod?.label ?: "الشهر الحالي",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Icon(
+                                    Icons.Default.ExpandMore,
+                                    contentDescription = "اختيار الشهر",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                         DropdownMenu(
                             expanded = periodMenuExpanded,
@@ -210,74 +228,116 @@ fun HomeScreen(
                 }
             }
 
-            // Hero Summary Card
+            // Hero Executive Card
             item {
-                HeroDashboardCard(state = state, currency = currency)
+                HeroEzbahCard(state = state, currency = currency)
             }
 
-            // Quick Actions Row
+            // 2x2 Bento Quick Action Grid
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AssistChip(
-                        onClick = onOpenElectricityDialog,
-                        label = { Text("تسجيل فاتورة الكهرباء") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.ElectricBolt,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                        modifier = Modifier.testTag("open_electricity_chip")
-                    )
-                    AssistChip(
-                        onClick = onOpenWhatsAppQueue,
-                        label = { Text("تذكير واتساب (${state.unpaidCount + state.partialCount})") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Chat,
-                                contentDescription = null,
-                                tint = StatusPaid,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                        modifier = Modifier.testTag("open_whatsapp_queue_chip")
-                    )
-                    AssistChip(
-                        onClick = onToggleMultiSelect,
-                        label = {
-                            Text(if (state.isMultiSelectMode) "إلغاء التحديد" else "تحديد الدافعين")
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.CheckBox,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                        modifier = Modifier.testTag("toggle_multiselect_chip")
-                    )
-                    if (currentPeriod != null && !currentPeriod.isClosed) {
-                        AssistChip(
-                            onClick = onOpenRolloverDialog,
-                            label = { Text("إغلاق وترحيل الشهر") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.FastForward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            modifier = Modifier.testTag("open_rollover_chip")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BentoActionTile(
+                            title = if (state.config.waterIncludedInRent) "فاتورة الكهرباء" else "الكهرباء والماء",
+                            subtitle = Formatters.formatMoney(currentPeriod?.electricityTotalAmount ?: 0.0, currency),
+                            icon = Icons.Default.ElectricBolt,
+                            accent = EzbahGold,
+                            onClick = onOpenUtilitiesDialog,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("open_electricity_chip")
                         )
+                        BentoActionTile(
+                            title = "تذكير واتساب",
+                            subtitle = "${state.unpaidCount + state.partialCount} متبقي عليهم",
+                            icon = Icons.AutoMirrored.Filled.Chat,
+                            accent = StatusPaid,
+                            onClick = onOpenWhatsAppQueue,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("open_whatsapp_queue_chip")
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BentoActionTile(
+                            title = if (state.isMultiSelectMode) "إلغاء التحديد" else "تحديد الدافعين",
+                            subtitle = if (state.isMultiSelectMode) "${state.selectedLedgerIds.size} محدد" else "سداد جماعي سريع",
+                            icon = Icons.Default.CheckBox,
+                            accent = MaterialTheme.colorScheme.primary,
+                            onClick = onToggleMultiSelect,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("toggle_multiselect_chip")
+                        )
+                        BentoActionTile(
+                            title = "ترحيل للشهر التالي",
+                            subtitle = if (currentPeriod?.isClosed == true) "الفترة مغلقة" else "حفظ المتبقي والمقدم",
+                            icon = Icons.Default.FastForward,
+                            accent = MaterialTheme.colorScheme.tertiary,
+                            enabled = currentPeriod != null && !currentPeriod.isClosed,
+                            onClick = onOpenRolloverDialog,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("open_rollover_chip")
+                        )
+                    }
+                }
+            }
+
+            // Room Overview Strip (interactive room filter)
+            if (state.roomSummaries.size > 1) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        state.roomSummaries.forEach { rm ->
+                            val selected = state.selectedRoomFilter == rm.roomNumber
+                            Surface(
+                                onClick = {
+                                    onRoomFilter(if (selected) null else rm.roomNumber)
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Home,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Column {
+                                        Text(
+                                            "غرفة ${rm.roomNumber} (${rm.residentCount})",
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                        Text(
+                                            if (rm.remainingTotal <= 0.05) "مكتملة السداد"
+                                            else "متبقي ${Formatters.formatMoney(rm.remainingTotal, currency)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (rm.remainingTotal <= 0.05) StatusPaid else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -286,6 +346,7 @@ fun HomeScreen(
             item {
                 AnimatedVisibility(visible = state.isMultiSelectMode) {
                     Card(
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
@@ -325,7 +386,7 @@ fun HomeScreen(
                 }
             }
 
-            // Search & Filters
+            // Search & Status Filters
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -341,7 +402,11 @@ fun HomeScreen(
                             }
                         },
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -352,20 +417,10 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilterChip(
-                            selected = state.selectedRoomFilter == null,
-                            onClick = { onRoomFilter(null) },
-                            label = { Text("كل الغرف") }
+                            selected = state.selectedStatusFilter == null,
+                            onClick = { onStatusFilter(null) },
+                            label = { Text("الكل (${state.allLedgerItems.size})") }
                         )
-                        for (room in 1..state.config.roomCount) {
-                            FilterChip(
-                                selected = state.selectedRoomFilter == room,
-                                onClick = {
-                                    onRoomFilter(if (state.selectedRoomFilter == room) null else room)
-                                },
-                                label = { Text("غرفة $room") }
-                            )
-                        }
-                        Spacer(Modifier.width(4.dp))
                         FilterChip(
                             selected = state.selectedStatusFilter == PaymentStatus.UNPAID,
                             onClick = {
@@ -382,7 +437,7 @@ fun HomeScreen(
                                     if (state.selectedStatusFilter == PaymentStatus.PARTIAL) null else PaymentStatus.PARTIAL
                                 )
                             },
-                            label = { Text("دفع جزئي (${state.partialCount})") }
+                            label = { Text("جزئي (${state.partialCount})") }
                         )
                         FilterChip(
                             selected = state.selectedStatusFilter == PaymentStatus.PAID,
@@ -391,53 +446,56 @@ fun HomeScreen(
                                     if (state.selectedStatusFilter == PaymentStatus.PAID) null else PaymentStatus.PAID
                                 )
                             },
-                            label = { Text("مدفوع (${state.paidCount})") }
+                            label = { Text("خالص (${state.paidCount})") }
                         )
+                        if (state.advanceCreditCount > 0) {
+                            FilterChip(
+                                selected = state.selectedStatusFilter == PaymentStatus.ADVANCE_CREDIT,
+                                onClick = {
+                                    onStatusFilter(
+                                        if (state.selectedStatusFilter == PaymentStatus.ADVANCE_CREDIT) null else PaymentStatus.ADVANCE_CREDIT
+                                    )
+                                },
+                                label = { Text("مدفوع مقدماً (${state.advanceCreditCount})") }
+                            )
+                        }
                     }
                 }
             }
 
-            // Residents Ledger List
+            // Residents List
             if (state.filteredLedgerItems.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                         )
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp),
+                                .padding(28.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
                                 Icons.Default.Home,
                                 contentDescription = null,
-                                modifier = Modifier.size(44.dp),
+                                modifier = Modifier.size(40.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                "لا يوجد سكان مطابقون للتصفية الحالية",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                "أضف سكاناً من تبويب السكان أو قم بتغيير خيارات التصفية.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("لا يوجد سكان مطابقون للبحث", style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }
             } else {
                 items(state.filteredLedgerItems, key = { it.ledger.id }) { item ->
-                    ResidentLedgerCard(
+                    ResidentEzbahCard(
                         item = item,
                         currency = currency,
                         rentCycleMonths = state.config.rentCycleMonths,
-                        collectMonthly = state.config.collectRentMonthlyInstallment,
+                        waterIncludedInRent = state.config.waterIncludedInRent,
                         isMultiSelectMode = state.isMultiSelectMode,
                         isSelected = item.ledger.id in state.selectedLedgerIds,
                         onToggleSelect = { onToggleLedgerSelection(item.ledger.id) },
@@ -466,20 +524,20 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HeroDashboardCard(
+private fun HeroEzbahCard(
     state: MainUiState,
     currency: String
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = state.collectionProgress,
-        animationSpec = spring(stiffness = 300f),
+        animationSpec = spring(stiffness = 280f),
         label = "progress"
     )
     val period = state.selectedPeriod
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
-        tonalElevation = 4.dp,
+        shape = RoundedCornerShape(26.dp),
+        shadowElevation = 4.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
@@ -487,22 +545,22 @@ private fun HeroDashboardCard(
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(EmeraldPrimaryDark, EmeraldPrimary, SlateTertiary)
+                        colors = listOf(EzbahTealDeep, EzbahTeal, Color(0xFF153B47))
                     )
                 )
                 .drawBehind {
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.06f),
-                        radius = size.height * 0.65f,
-                        center = Offset(size.width * 0.1f, size.height * 0.15f)
+                        color = EzbahGoldLight.copy(alpha = 0.08f),
+                        radius = size.height * 0.55f,
+                        center = Offset(size.width * 0.08f, size.height * 0.12f)
                     )
                     drawCircle(
                         color = Color.White.copy(alpha = 0.05f),
-                        radius = size.height * 0.45f,
-                        center = Offset(size.width * 0.92f, size.height * 0.85f)
+                        radius = size.height * 0.42f,
+                        center = Offset(size.width * 0.94f, size.height * 0.88f)
                     )
                 }
-                .padding(18.dp)
+                .padding(20.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(
@@ -512,9 +570,9 @@ private fun HeroDashboardCard(
                 ) {
                     Column {
                         Text(
-                            text = "المتبقي للتحصيل (${period?.label ?: ""})",
+                            text = "المتبقي للتحصيل • ${period?.label ?: ""}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.85f)
+                            color = Color.White.copy(alpha = 0.82f)
                         )
                         Text(
                             text = Formatters.formatMoney(state.totalRemaining, currency),
@@ -523,8 +581,8 @@ private fun HeroDashboardCard(
                         )
                     }
                     Surface(
-                        color = Color.White.copy(alpha = 0.16f),
-                        shape = RoundedCornerShape(12.dp)
+                        color = EzbahGoldLight.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(14.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -533,12 +591,13 @@ private fun HeroDashboardCard(
                             Text(
                                 text = "${(animatedProgress * 100).toInt()}%",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = Color.White
+                                color = EzbahGoldLight,
+                                fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "نسبة السداد",
+                                text = "${state.paidOrAdvanceCount}/${state.allLedgerItems.size} خالص",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = Color.White.copy(alpha = 0.85f)
                             )
                         }
                     }
@@ -550,8 +609,8 @@ private fun HeroDashboardCard(
                         .fillMaxWidth()
                         .height(8.dp)
                         .clip(RoundedCornerShape(8.dp)),
-                    color = Color(0xFF34D399),
-                    trackColor = Color.White.copy(alpha = 0.2f),
+                    color = EzbahGoldLight,
+                    trackColor = Color.White.copy(alpha = 0.18f),
                     strokeCap = StrokeCap.Round
                 )
 
@@ -565,75 +624,97 @@ private fun HeroDashboardCard(
                         color = Color(0xFFA7F3D0)
                     )
                     Text(
-                        text = "الإجمالي المطلوب: ${Formatters.formatMoney(state.totalDue, currency)}",
+                        text = "الإجمالي: ${Formatters.formatMoney(state.totalDue, currency)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = Color.White.copy(alpha = 0.82f)
                     )
                 }
 
-                HorizontalDivider(color = Color.White.copy(alpha = 0.16f))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
 
-                // Separated Rent vs Electricity vs Carry-Over KPIs
+                // Split Per-Person Costs
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    HeroMiniTile(
-                        title = "نصيب السكن للفرد",
-                        primaryValue = Formatters.formatMoney(
-                            if (state.config.collectRentMonthlyInstallment) state.monthlyRentPerPerson
-                            else state.cycleRentPerPerson,
-                            currency
-                        ),
-                        subtitle = if (state.config.rentCycleMonths > 1) {
-                            if (state.config.collectRentMonthlyInstallment) {
-                                "دورة ${state.config.rentCycleMonths} أشهر: ${Formatters.formatMoney(state.cycleRentPerPerson)}"
-                            } else {
-                                "شهرياً: ${Formatters.formatMoney(state.monthlyRentPerPerson, currency)}"
-                            }
+                    HeroStatChip(
+                        title = "السكن للفرد",
+                        value = Formatters.formatMoney(state.monthlyRentPerPerson, currency),
+                        sub = if (state.config.rentCycleMonths > 1) {
+                            "كل ${state.config.rentCycleMonths} أشهر: ${Formatters.formatMoney(state.cycleRentPerPerson)}"
                         } else {
-                            "إجمالي: ${Formatters.formatMoney(state.config.rentCycleAmount)}"
+                            "الإجمالي: ${Formatters.formatMoney(state.config.rentCycleAmount)}"
                         },
                         modifier = Modifier.weight(1f)
                     )
-                    HeroMiniTile(
-                        title = "نصيب الكهرباء للفرد",
-                        primaryValue = Formatters.formatMoney(state.electricityPerPerson, currency),
-                        subtitle = "الفاتورة: ${Formatters.formatMoney(period?.electricityTotalAmount ?: 0.0)}",
+                    HeroStatChip(
+                        title = "الكهرباء للفرد",
+                        value = Formatters.formatMoney(state.electricityPerPerson, currency),
+                        sub = "الفاتورة: ${Formatters.formatMoney(period?.electricityTotalAmount ?: 0.0)}",
                         modifier = Modifier.weight(1f)
                     )
+                    if (!state.config.waterIncludedInRent) {
+                        HeroStatChip(
+                            title = "الماء للفرد",
+                            value = Formatters.formatMoney(state.waterPerPerson, currency),
+                            sub = "الفاتورة: ${Formatters.formatMoney(period?.waterTotalAmount ?: 0.0)}",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
 
-                if (state.totalPreviousArrears > 0.05) {
-                    Surface(
-                        color = Color(0xFFF59E0B).copy(alpha = 0.22f),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                if (state.totalPreviousArrears > 0.05 || state.totalAdvanceCredits > 0.05) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.History,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFDE68A),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    "متبقي مرحّل من الأشهر السابقة:",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFFFEF3C7)
-                                )
+                        if (state.totalPreviousArrears > 0.05) {
+                            Surface(
+                                color = Color(0xFFF59E0B).copy(alpha = 0.22f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.History, contentDescription = null, tint = Color(0xFFFDE68A), modifier = Modifier.size(15.dp))
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("متبقي سابق", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFEF3C7))
+                                    }
+                                    Text(
+                                        Formatters.formatMoney(state.totalPreviousArrears, currency),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = Color.White
+                                    )
+                                }
                             }
-                            Text(
-                                Formatters.formatMoney(state.totalPreviousArrears, currency),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = Color.White
-                            )
+                        }
+                        if (state.totalAdvanceCredits > 0.05) {
+                            Surface(
+                                color = Color(0xFF38BDF8).copy(alpha = 0.22f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Verified, contentDescription = null, tint = Color(0xFFBAE6FD), modifier = Modifier.size(15.dp))
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("رصيد مقدم", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE0F2FE))
+                                    }
+                                    Text(
+                                        Formatters.formatMoney(state.totalAdvanceCredits, currency),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -643,14 +724,14 @@ private fun HeroDashboardCard(
 }
 
 @Composable
-private fun HeroMiniTile(
+private fun HeroStatChip(
     title: String,
-    primaryValue: String,
-    subtitle: String,
+    value: String,
+    sub: String,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = Color.White.copy(alpha = 0.12f),
+        color = Color.White.copy(alpha = 0.11f),
         shape = RoundedCornerShape(14.dp),
         modifier = modifier
     ) {
@@ -658,20 +739,12 @@ private fun HeroMiniTile(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            Text(title, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.78f))
+            Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 1)
             Text(
-                text = title,
+                sub,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.8f)
-            )
-            Text(
-                text = primaryValue,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.72f),
+                color = Color.White.copy(alpha = 0.7f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -680,11 +753,64 @@ private fun HeroMiniTile(
 }
 
 @Composable
-private fun ResidentLedgerCard(
+private fun BentoActionTile(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = accent.copy(alpha = 0.13f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResidentEzbahCard(
     item: ResidentLedgerWithDetails,
     currency: String,
     rentCycleMonths: Int,
-    collectMonthly: Boolean,
+    waterIncludedInRent: Boolean,
     isMultiSelectMode: Boolean,
     isSelected: Boolean,
     onToggleSelect: () -> Unit,
@@ -696,56 +822,49 @@ private fun ResidentLedgerCard(
     val status = ledger.paymentStatus
 
     val (statusText, statusColor, statusBg) = when (status) {
-        PaymentStatus.PAID -> Triple("مدفوع بالكامل", StatusPaid, StatusPaidContainer)
+        PaymentStatus.ADVANCE_CREDIT -> Triple("مدفوع مقدماً", StatusAdvance, StatusAdvanceContainer)
+        PaymentStatus.PAID -> Triple("خالص", StatusPaid, StatusPaidContainer)
         PaymentStatus.PARTIAL -> Triple("دفع جزئي", StatusPartial, StatusPartialContainer)
         PaymentStatus.UNPAID -> Triple("لم يدفع", StatusUnpaid, StatusUnpaidContainer)
     }
 
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             width = if (isSelected) 2.dp else 1.dp,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                if (isMultiSelectMode) onToggleSelect() else onRecordPayment()
-            }
+            .clickable { if (isMultiSelectMode) onToggleSelect() else onRecordPayment() }
             .testTag("resident_card_${resident.id}")
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Top Row: Avatar + Name + Room + Status + Remaining Total
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     if (isMultiSelectMode) {
-                        Checkbox(
-                            checked = isSelected,
-                            onCheckedChange = { onToggleSelect() }
-                        )
+                        Checkbox(checked = isSelected, onCheckedChange = { onToggleSelect() })
                     } else {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(44.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                .background(statusBg),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = resident.name.take(2),
                                 style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = statusColor,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         Spacer(Modifier.width(10.dp))
@@ -767,10 +886,7 @@ private fun ResidentLedgerCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Surface(
-                                color = statusBg,
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
+                            Surface(color = statusBg, shape = RoundedCornerShape(8.dp)) {
                                 Text(
                                     text = statusText,
                                     style = MaterialTheme.typography.labelSmall,
@@ -783,22 +899,52 @@ private fun ResidentLedgerCard(
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = if (ledger.totalRemaining <= 0.05) "خالص" else Formatters.formatMoney(ledger.totalRemaining, currency),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (ledger.totalRemaining <= 0.05) StatusPaid else MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = if (ledger.totalRemaining <= 0.05) "تم السداد" else "المتبقي عليه",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    when {
+                        ledger.totalRemaining <= 0.05 && ledger.totalAdvanceCredit > 0.05 -> {
+                            Text(
+                                text = "+${Formatters.formatMoney(ledger.totalAdvanceCredit, currency)}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = StatusAdvance,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "رصيد مقدم",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = StatusAdvance
+                            )
+                        }
+                        ledger.totalRemaining <= 0.05 -> {
+                            Text(
+                                text = "خالص",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = StatusPaid,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "تم السداد",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        else -> {
+                            Text(
+                                text = Formatters.formatMoney(ledger.totalRemaining, currency),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "المتبقي عليه",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 
-            // Carried-over Previous Balance Alert
-            if (ledger.previousTotalBalance > 0.05) {
+            // Previous Arrears OR Previous Advance Credit notice
+            if (ledger.previousArrearsDebt > 0.05) {
                 Surface(
                     color = StatusPartialContainer.copy(alpha = 0.7f),
                     shape = RoundedCornerShape(10.dp),
@@ -806,117 +952,77 @@ private fun ResidentLedgerCard(
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
+                        Text("متبقي مرحّل من السابق:", style = MaterialTheme.typography.labelMedium, color = StatusPartial)
                         Text(
-                            text = "↩️ متبقي مرحّل من الشهر السابق:",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = StatusPartial
-                        )
-                        Text(
-                            text = Formatters.formatMoney(ledger.previousTotalBalance, currency),
+                            Formatters.formatMoney(ledger.previousArrearsDebt, currency),
                             style = MaterialTheme.typography.labelLarge,
                             color = StatusPartial,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
+            } else if (ledger.totalAdvanceCredit > 0.05 && ledger.totalRemaining > 0.05) {
+                Surface(
+                    color = StatusAdvanceContainer,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("له رصيد سكن مدفوع مقدماً:", style = MaterialTheme.typography.labelMedium, color = StatusAdvance)
+                        Text(
+                            Formatters.formatMoney(ledger.totalAdvanceCredit, currency),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = StatusAdvance,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
 
-            // Separated Rent & Electricity Breakdown
+            // Separated Utilities Breakdown
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Rent Box
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    shape = RoundedCornerShape(12.dp),
+                MiniBreakdownBox(
+                    icon = Icons.Default.Home,
+                    iconColor = MaterialTheme.colorScheme.primary,
+                    label = "السكن",
+                    remaining = ledger.remainingRent,
+                    credit = ledger.creditRent,
+                    shareText = "قسط: ${Formatters.formatMoney(ledger.currentRentShare)}",
+                    currency = currency,
                     modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Home,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("السكن", style = MaterialTheme.typography.labelMedium)
-                        }
-                        Text(
-                            text = "متبقي: ${Formatters.formatMoney(ledger.remainingRent, currency)}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (ledger.remainingRent <= 0.05) StatusPaid else MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "حصة: ${Formatters.formatMoney(ledger.currentRentShare)}" +
-                                if (ledger.previousRentBalance > 0.05) " + سابق ${Formatters.formatMoney(ledger.previousRentBalance)}" else "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (rentCycleMonths > 1 && !collectMonthly) {
-                            Text(
-                                text = "شهرياً: ${Formatters.formatMoney(ledger.currentRentShare / rentCycleMonths)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-
-                // Electricity Box
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    shape = RoundedCornerShape(12.dp),
+                )
+                MiniBreakdownBox(
+                    icon = Icons.Default.ElectricBolt,
+                    iconColor = EzbahGold,
+                    label = "الكهرباء",
+                    remaining = ledger.remainingElectricity,
+                    credit = ledger.creditElectricity,
+                    shareText = "حصة: ${Formatters.formatMoney(ledger.currentElectricityShare)}",
+                    currency = currency,
                     modifier = Modifier.weight(1f)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.ElectricBolt,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("الكهرباء", style = MaterialTheme.typography.labelMedium)
-                        }
-                        Text(
-                            text = "متبقي: ${Formatters.formatMoney(ledger.remainingElectricity, currency)}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (ledger.remainingElectricity <= 0.05) StatusPaid else MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "حصة: ${Formatters.formatMoney(ledger.currentElectricityShare)}" +
-                                if (ledger.previousElectricityBalance > 0.05) " + سابق ${Formatters.formatMoney(ledger.previousElectricityBalance)}" else "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (ledger.paidElectricity > 0.05) {
-                            Text(
-                                text = "مدفوع: ${Formatters.formatMoney(ledger.paidElectricity)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = StatusPaid
-                            )
-                        }
-                    }
+                )
+                if (!waterIncludedInRent) {
+                    MiniBreakdownBox(
+                        icon = Icons.Default.WaterDrop,
+                        iconColor = StatusAdvance,
+                        label = "الماء",
+                        remaining = ledger.remainingWater,
+                        credit = ledger.creditWater,
+                        shareText = "حصة: ${Formatters.formatMoney(ledger.currentWaterShare)}",
+                        currency = currency,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
-            // Action Buttons Row
             if (!isMultiSelectMode) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -930,13 +1036,17 @@ private fun ResidentLedgerCard(
                             .testTag("pay_button_${resident.id}")
                     ) {
                         Icon(
-                            if (status == PaymentStatus.PAID) Icons.Default.CheckCircle else Icons.Default.Payments,
+                            if (status == PaymentStatus.PAID || status == PaymentStatus.ADVANCE_CREDIT) {
+                                Icons.Default.CheckCircle
+                            } else {
+                                Icons.Default.Payments
+                            },
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (status == PaymentStatus.PAID) "تعديل / تفاصيل" else "تسجيل دفعة"
+                            if (ledger.totalRemaining <= 0.05) "إضافة دفعة / تفاصيل" else "تسجيل دفعة"
                         )
                     }
                     OutlinedButton(
@@ -956,6 +1066,57 @@ private fun ResidentLedgerCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MiniBreakdownBox(
+    icon: ImageVector,
+    iconColor: Color,
+    label: String,
+    remaining: Double,
+    credit: Double,
+    shareText: String,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(9.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(label, style = MaterialTheme.typography.labelMedium)
+            }
+            Text(
+                text = when {
+                    credit > 0.05 -> "مقدم +${Formatters.formatMoney(credit)}"
+                    remaining <= 0.05 -> "خالص"
+                    else -> Formatters.formatMoney(remaining, currency)
+                },
+                style = MaterialTheme.typography.titleSmall,
+                color = when {
+                    credit > 0.05 -> StatusAdvance
+                    remaining <= 0.05 -> StatusPaid
+                    else -> MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = shareText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

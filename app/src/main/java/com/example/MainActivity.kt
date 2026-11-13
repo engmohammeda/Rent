@@ -19,10 +19,13 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -49,15 +53,15 @@ import androidx.navigation.compose.rememberNavController
 import com.example.data.local.ResidentLedgerWithDetails
 import com.example.notifications.ReminderScheduler
 import com.example.ui.MainViewModel
-import com.example.ui.components.ElectricityBillDialog
 import com.example.ui.components.PaymentBottomSheet
 import com.example.ui.components.RolloverPeriodDialog
+import com.example.ui.components.UtilitiesBillDialog
 import com.example.ui.components.WhatsAppQueueDialog
 import com.example.ui.screens.ElectricityAnalyticsScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.ResidentsScreen
 import com.example.ui.screens.SettingsScreen
-import com.example.ui.theme.SakanTheme
+import com.example.ui.theme.EzbahTheme
 
 private data class NavDestinationItem(
     val route: String,
@@ -69,7 +73,7 @@ private data class NavDestinationItem(
 private val destinations = listOf(
     NavDestinationItem("home", "الرئيسية", Icons.Filled.Home, Icons.Outlined.Home),
     NavDestinationItem("residents", "السكان", Icons.Filled.Group, Icons.Outlined.Group),
-    NavDestinationItem("electricity", "الكهرباء", Icons.Filled.ElectricBolt, Icons.Outlined.ElectricBolt),
+    NavDestinationItem("electricity", "الفواتير", Icons.Filled.ElectricBolt, Icons.Outlined.ElectricBolt),
     NavDestinationItem("settings", "الإعدادات", Icons.Filled.Settings, Icons.Outlined.Settings)
 )
 
@@ -79,15 +83,15 @@ class MainActivity : ComponentActivity() {
         ReminderScheduler.ensureChannel(this)
         enableEdgeToEdge()
         setContent {
-            SakanTheme {
-                SakanApp()
+            EzbahTheme {
+                EzbahApp()
             }
         }
     }
 }
 
 @Composable
-fun SakanApp() {
+fun EzbahApp() {
     val context = LocalContext.current
     val viewModel: MainViewModel = viewModel(factory = MainViewModel.Factory(context))
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -101,7 +105,7 @@ fun SakanApp() {
     val useNavRail = screenWidthDp >= 600
 
     var activePaymentTarget by remember { mutableStateOf<ResidentLedgerWithDetails?>(null) }
-    var showElectricityDialog by remember { mutableStateOf(false) }
+    var showUtilitiesDialog by remember { mutableStateOf(false) }
     var showRolloverDialog by remember { mutableStateOf(false) }
     var showWhatsAppQueue by remember { mutableStateOf(false) }
 
@@ -123,16 +127,36 @@ fun SakanApp() {
         }
     }
 
+    val navBarItemColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    val navRailItemColors = NavigationRailItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (!useNavRail) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 2.dp
+                ) {
                     destinations.forEach { dest ->
                         val selected = currentDestination?.hierarchy?.any { it.route == dest.route } == true
                         NavigationBarItem(
                             selected = selected,
                             onClick = { navigateTo(dest.route) },
+                            colors = navBarItemColors,
                             icon = {
                                 Icon(
                                     imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
@@ -152,12 +176,15 @@ fun SakanApp() {
                 .padding(innerPadding)
         ) {
             if (useNavRail) {
-                NavigationRail {
+                NavigationRail(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
                     destinations.forEach { dest ->
                         val selected = currentDestination?.hierarchy?.any { it.route == dest.route } == true
                         NavigationRailItem(
                             selected = selected,
                             onClick = { navigateTo(dest.route) },
+                            colors = navRailItemColors,
                             icon = {
                                 Icon(
                                     imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
@@ -192,7 +219,7 @@ fun SakanApp() {
                             onSelectAllUnpaid = viewModel::selectAllUnpaid,
                             onBatchPaySelected = viewModel::batchPaySelected,
                             onOpenPaymentSheet = { activePaymentTarget = it },
-                            onOpenElectricityDialog = { showElectricityDialog = true },
+                            onOpenUtilitiesDialog = { showUtilitiesDialog = true },
                             onOpenRolloverDialog = { showRolloverDialog = true },
                             onOpenWhatsAppQueue = { showWhatsAppQueue = true }
                         )
@@ -209,7 +236,7 @@ fun SakanApp() {
                     composable("electricity") {
                         ElectricityAnalyticsScreen(
                             state = state,
-                            onUpdateCurrentElectricity = viewModel::updateCurrentElectricity,
+                            onUpdateCurrentUtilities = viewModel::updateCurrentUtilities,
                             onAddHistoricalElectricity = viewModel::addOrUpdateHistoricalElectricity
                         )
                     }
@@ -230,8 +257,9 @@ fun SakanApp() {
             item = target,
             config = state.config,
             monthlyRentPerPerson = state.monthlyRentPerPerson,
+            cycleRentPerPerson = state.cycleRentPerPerson,
             onDismiss = { activePaymentTarget = null },
-            onConfirmPayment = { amount, mode, customRent, customElec, note ->
+            onConfirmPayment = { amount, mode, customRent, customElec, customWater, note ->
                 activePaymentTarget = null
                 viewModel.recordPayment(
                     ledgerId = target.ledger.id,
@@ -240,6 +268,7 @@ fun SakanApp() {
                     mode = mode,
                     customRentPart = customRent,
                     customElectricityPart = customElec,
+                    customWaterPart = customWater,
                     note = note
                 )
             },
@@ -251,20 +280,22 @@ fun SakanApp() {
     }
 
     val currentPeriod = state.selectedPeriod
-    if (showElectricityDialog && currentPeriod != null) {
-        ElectricityBillDialog(
+    if (showUtilitiesDialog && currentPeriod != null) {
+        UtilitiesBillDialog(
             initialYear = currentPeriod.year,
             initialMonth = currentPeriod.month,
-            initialAmount = currentPeriod.electricityTotalAmount,
+            initialElecAmount = currentPeriod.electricityTotalAmount,
+            initialWaterAmount = currentPeriod.waterTotalAmount,
             initialPrevReading = currentPeriod.prevMeterReading,
             initialCurrReading = currentPeriod.currMeterReading,
+            waterIncludedInRent = state.config.waterIncludedInRent,
             activeResidentsCount = state.activeResidentsCount,
             currency = state.config.currencySymbol,
             allowMonthSelection = false,
-            onDismiss = { showElectricityDialog = false },
-            onSave = { _, _, amt, prev, curr ->
-                showElectricityDialog = false
-                viewModel.updateCurrentElectricity(currentPeriod.id, amt, prev, curr)
+            onDismiss = { showUtilitiesDialog = false },
+            onSave = { _, _, elecAmt, waterAmt, prev, curr ->
+                showUtilitiesDialog = false
+                viewModel.updateCurrentUtilities(currentPeriod.id, elecAmt, waterAmt, prev, curr)
             }
         )
     }
@@ -274,13 +305,15 @@ fun SakanApp() {
             currentPeriod = currentPeriod,
             unpaidResidentsCount = state.unpaidCount + state.partialCount,
             totalCarryOverAmount = state.totalRemaining,
+            totalAdvanceCredits = state.totalAdvanceCredits,
             config = state.config,
             onDismiss = { showRolloverDialog = false },
-            onConfirmRollover = { nextElec, nextPrev, nextCurr, chargeRent ->
+            onConfirmRollover = { nextElec, nextWater, nextPrev, nextCurr, chargeRent ->
                 showRolloverDialog = false
                 viewModel.closePeriodAndRollover(
                     currentPeriodId = currentPeriod.id,
                     nextElectricityAmount = nextElec,
+                    nextWaterAmount = nextWater,
                     nextPrevReading = nextPrev,
                     nextCurrReading = nextCurr,
                     chargeRentInNewPeriod = chargeRent
